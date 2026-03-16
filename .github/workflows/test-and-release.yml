@@ -24,9 +24,14 @@ jobs:
           node-version: 20
           cache: 'npm'
       - run: npm install
-      - run: npm run lint
+      - name: Check and Lint
+        uses: ioBroker/testing-action-check@v1
+        with:
+          node-version: 20
+          lint: true
 
   adapter-tests:
+    needs: [check-and-lint]
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -40,11 +45,10 @@ jobs:
           node-version: ${{ matrix.node-version }}
           cache: 'npm'
       - run: npm install
-      - name: Run tests
-        run: npm test
-      - name: Run unit tests
-        run: npm run test:unit
-      # - name: Run integration tests
-      #   run: npm run test:integration
+      - name: Run adapter tests
+        uses: ioBroker/testing-action-adapter@v1
+        with:
+          node-version: ${{ matrix.node-version }}
+
 
 
