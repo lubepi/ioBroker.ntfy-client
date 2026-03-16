@@ -40,4 +40,5 @@ Ntfy supports a few variations:
 * (lubepi) initial release
 
 ## License
+Copyright (c) 2026 lubepi <https://github.com/lubepi>
 MIT License

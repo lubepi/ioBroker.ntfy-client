@@ -21,7 +21,7 @@
     "url": "https://github.com/lubepi/ioBroker.ntfy.git"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=20"
   },
   "files": [
     "admin{,/!(src)/**}/*",
@@ -32,11 +32,11 @@
     "main.js"
   ],
   "dependencies": {
-    "@iobroker/adapter-core": "^3.1.6",
-    "axios": "^1.6.8"
+    "@iobroker/adapter-core": "^3.2.3",
+    "axios": "^1.7.9"
   },
   "devDependencies": {
-    "@iobroker/testing": "^4.1.0",
+    "@iobroker/testing": "^5.2.2",
     "chai": "^4.3.10",
     "eslint": "^8.57.1",
     "mocha": "^10.2.0"

@@ -14,3 +14,4 @@ package-lock.json
 /test
 /admin/blockly.js
 # we keep admin/blockly.js in git but might exclude from npm if not needed? No, ioBroker needs it.
+.commitinfo

@@ -17,7 +17,6 @@
         "zh-cn": "首次发行"
       }
     },
-    "title": "ntfy",
     "titleLang": {
       "en": "ntfy",
       "de": "ntfy",
@@ -40,8 +39,8 @@
       "fr": "Adaptateur ntfy.sh pour ioBroker",
       "it": "Adattatore ntfy.sh per ioBroker",
       "es": "Adaptador ntfy.sh para ioBroker",
-      "pl": "Adapter ntfy.sh dla ioBroker",
-      "uk": "Адаптер ntfy.sh для ioBroker",
+      "pl": "Adapter ntfy.sh für ioBroker",
+      "uk": "Адаптер ntfy.sh für ioBroker",
       "zh-cn": "ioBroker 的 ntfy.sh 适配器"
     },
     "authors": [
@@ -63,16 +62,35 @@
     "mode": "daemon",
     "type": "messaging",
     "compact": true,
-    "materialize": true,
+    "adminUI": {
+      "config": "html"
+    },
     "messagebox": true,
     "blockly": true,
     "subscribe": null,
     "tier": 3,
     "connectionType": "cloud",
     "dataSource": "push",
+    "licenseInformation": {
+      "type": "free",
+      "license": "MIT"
+    },
+    "protectedNative": [
+      "pass",
+      "token"
+    ],
+    "encryptedNative": [
+      "pass",
+      "token"
+    ],
     "dependencies": [
       {
-        "js-controller": ">=5.0.0"
+        "js-controller": ">=6.0.11"
+      }
+    ],
+    "globalDependencies": [
+      {
+        "admin": ">=7.6.17"
       }
     ]
   },
