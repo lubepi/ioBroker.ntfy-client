@@ -1,9 +1,9 @@
-![Logo](admin/ntfy.png)
+![Logo](admin/ntfy-sh.png)
 # ioBroker.ntfy-sh
 
-## ntfy.sh adapter for ioBroker
+## Unofficial ntfy.sh adapter for ioBroker
 
-Send notifications to [ntfy.sh](https://ntfy.sh) directly from ioBroker.
+Send notifications to [ntfy.sh](https://ntfy.sh) directly from ioBroker. This adapter is a community project and not affiliated with ntfy LLC.
 
 ### Features
 * Complete adapter with basic authentication and bearer token support.
@@ -40,5 +40,7 @@ Ntfy supports a few variations:
 * (lubepi) initial release with full ntfy.sh support
 
 ## License
-Copyright (c) 2026 lubepi <https://github.com/lubepi>
-MIT License
+MIT License - Copyright (c) 2026 lubepi <https://github.com/lubepi>
+
+## Legal Notice
+This adapter is **NOT** an official product of ntfy LLC. The name **ntfy**, the logo and branding are trademarks of ntfy LLC. This adapter is a community project to provide integration into ioBroker.

@@ -31,8 +31,8 @@
       "zh-cn": "ntfy"
     },
     "desc": {
-      "en": "ntfy.sh adapter for ioBroker",
-      "de": "ntfy.sh Adapter für ioBroker",
+      "en": "Unofficial ntfy.sh adapter for ioBroker",
+      "de": "Inoffizieller ntfy.sh Adapter für ioBroker",
       "ru": "Адаптер ntfy.sh для ioBroker",
       "pt": "Adaptador ntfy.sh para ioBroker",
       "nl": "ntfy.sh adapter voor ioBroker",
