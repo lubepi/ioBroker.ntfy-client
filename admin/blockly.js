@@ -673,6 +673,45 @@ if (typeof Blockly !== "undefined") {
             };
           }
         }
+
+        // Blockly Mutator internally reads size directly using the SVG
+        // elements' getBBox() in older or certain versions.
+        const capBBox = (element) => {
+          if (
+            element &&
+            typeof element.getBBox === "function" &&
+            !element._ntfyPatchedBBox
+          ) {
+            element._ntfyPatchedBBox = true;
+            const orig = element.getBBox.bind(element);
+            element.getBBox = function () {
+              const bbox = orig();
+              if (bbox && bbox.height > maxBubbleHeight - 30) {
+                return {
+                  x: bbox.x,
+                  y: bbox.y,
+                  width: bbox.width,
+                  height: maxBubbleHeight - 30,
+                  top: bbox.y,
+                  bottom: bbox.y + maxBubbleHeight - 30,
+                  left: bbox.x,
+                  right: bbox.x + bbox.width,
+                };
+              }
+              return bbox;
+            };
+          }
+        };
+
+        if (typeof workspace.getCanvas === "function") {
+          capBBox(workspace.getCanvas());
+        }
+        if (typeof workspace.getBubbleCanvas === "function") {
+          capBBox(workspace.getBubbleCanvas());
+        }
+        if (flyout && flyout.svgGroup_) {
+          capBBox(flyout.svgGroup_);
+        }
       }
 
       // Simple helper: cap inner SVG content visually and enable wheel scrolling.
