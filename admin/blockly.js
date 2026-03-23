@@ -618,26 +618,8 @@ if (typeof Blockly !== "undefined") {
       const containerBlock = workspace.newBlock("ntfy_mutator_container");
       containerBlock.initSvg();
 
-      // Store bubble reference for height capping after render
-      const bubble = this.mutator && this.mutator.miniWorkspaceBubble;
+      // Reference for height capping the inner SVG content (not the frame)
       const maxBubbleHeight = Math.max(300, window.innerHeight * 0.45);
-
-      // Monkey-patch setSize to persistently cap the bubble frame height.
-      // Blockly calls setSize on every interaction (click, drag, reflow).
-      if (
-        bubble &&
-        typeof bubble.setSize === "function" &&
-        !bubble._ntfyPatched
-      ) {
-        bubble._ntfyPatched = true;
-        const originalSetSize = bubble.setSize.bind(bubble);
-        bubble.setSize = (size) => {
-          if (size && size.height > maxBubbleHeight) {
-            size = { width: size.width, height: maxBubbleHeight };
-          }
-          originalSetSize(size);
-        };
-      }
 
       let connection = containerBlock.getInput("STACK").connection;
 
@@ -650,21 +632,9 @@ if (typeof Blockly !== "undefined") {
         }
       });
 
-      // Simple helper: cap bubble height and enable wheel scrolling.
+      // Simple helper: cap inner SVG content and enable wheel scrolling.
       // Called AFTER Blockly finishes rendering so we don't interfere.
       const capBubbleAndScroll = () => {
-        // 1) Cap the bubble height
-        if (bubble && typeof bubble.setSize === "function") {
-          try {
-            const size = bubble.getSize();
-            if (size && size.height > maxBubbleHeight) {
-              bubble.setSize({ width: size.width, height: maxBubbleHeight });
-            }
-          } catch (_e) {
-            // ignore
-          }
-        }
-
         // 2) Also cap the inner workspace SVG and force clipping.
         // bubble.setSize() only resizes the frame, not the content viewport.
         const flyout = workspace.getFlyout
