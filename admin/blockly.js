@@ -672,6 +672,27 @@ if (typeof Blockly !== "undefined") {
               return m;
             };
           }
+
+          // Mutator.resizeBubble_ in many Blockly versions directly reads
+          // flyout.height_ to determine the final bubble height.
+          // Intercepting this property allows us to dynamically cap the height
+          // reported to the Mutator without breaking internal state.
+          if (!flyout._ntfyPatchedHeightProp) {
+            flyout._ntfyPatchedHeightProp = true;
+            let realHeight = flyout.height_ || 0;
+            try {
+              Object.defineProperty(flyout, "height_", {
+                get: function () {
+                  return Math.min(realHeight, maxBubbleHeight - 30);
+                },
+                set: function (val) {
+                  realHeight = val;
+                },
+              });
+            } catch (e) {
+              // Ignore if already defined or not configurable
+            }
+          }
         }
 
         // Blockly Mutator internally reads size directly using the SVG
