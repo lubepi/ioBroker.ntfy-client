@@ -636,7 +636,7 @@ if (typeof Blockly !== "undefined") {
       // Simple helper: cap bubble height and enable wheel scrolling.
       // Called AFTER Blockly finishes rendering so we don't interfere.
       const capBubbleAndScroll = () => {
-        // 1) Cap the bubble height (SVG viewport clips overflow naturally)
+        // 1) Cap the bubble height
         if (bubble && typeof bubble.setSize === "function") {
           try {
             const size = bubble.getSize();
@@ -648,12 +648,19 @@ if (typeof Blockly !== "undefined") {
           }
         }
 
-        // 2) Set up flyout wheel scrolling (attach handler only once)
+        // 2) Also cap the inner workspace SVG and force clipping.
+        // bubble.setSize() only resizes the frame, not the content viewport.
         const flyout = workspace.getFlyout
           ? workspace.getFlyout()
           : workspace.flyout_;
         if (!flyout || !flyout.svgGroup_) {
           return;
+        }
+        const innerSvg = flyout.svgGroup_.ownerSVGElement;
+        if (innerSvg) {
+          const cappedH = maxBubbleHeight - 12;
+          innerSvg.setAttribute("height", `${cappedH}px`);
+          innerSvg.style.overflow = "hidden";
         }
 
         const svgGroup = flyout.svgGroup_;
