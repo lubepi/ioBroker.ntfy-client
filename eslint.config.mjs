@@ -25,6 +25,12 @@ export default [
   },
   {
     files: ["admin/*.js"],
+    languageOptions: {
+      globals: {
+        window: "readonly",
+        document: "readonly",
+      },
+    },
     rules: {
       "no-unused-vars": "off",
       "@typescript-eslint/no-unused-vars": "off",

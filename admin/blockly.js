@@ -629,42 +629,112 @@ if (typeof Blockly !== "undefined") {
         }
       });
 
-      // Helper: Enable flyout scrolling (wheel + scrollbar)
+      // Helper: Enable flyout scrolling via SVG clip-path + wheel events.
+      // The Blockly mutator flyout has no native scrollbar in this version,
+      // so we clip the visible area and scroll the block canvas via transform.
       const enableFlyoutScroll = (flyout) => {
-        if (!flyout) {
+        if (!flyout || !flyout.svgGroup_) {
           return;
         }
 
-        // Force scrollbar visibility
-        if (
-          flyout.scrollbar_ &&
-          typeof flyout.scrollbar_.setVisible === "function"
-        ) {
-          flyout.scrollbar_.setVisible(true);
-        }
-
-        // Recalculate flyout metrics so the scrollbar knows the content height
-        if (typeof flyout.position === "function") {
-          flyout.position();
-        }
-
-        // Add wheel event support for scrolling
         const svgGroup = flyout.svgGroup_;
-        if (svgGroup && !svgGroup._ntfyWheelAttached) {
-          svgGroup._ntfyWheelAttached = true;
-          svgGroup.addEventListener(
-            "wheel",
-            (e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              if (flyout.scrollbar_) {
-                const current = flyout.scrollbar_.get();
-                flyout.scrollbar_.set(current + e.deltaY);
-              }
-            },
-            { passive: false },
-          );
+
+        // Prevent duplicate setup
+        if (svgGroup._ntfyScrollSetup) {
+          // Reset scroll position on flyout content change
+          if (svgGroup._ntfyResetScroll) {
+            svgGroup._ntfyResetScroll();
+          }
+          return;
         }
+        svgGroup._ntfyScrollSetup = true;
+
+        const contentHeight = flyout.height_ || 600;
+        const maxVisibleHeight = Math.min(
+          contentHeight,
+          Math.max(300, window.innerHeight * 0.45),
+        );
+
+        // No scrolling needed if all content fits
+        if (contentHeight <= maxVisibleHeight) {
+          return;
+        }
+
+        // Create SVG clipPath to limit visible flyout area
+        const svgNS = "http://www.w3.org/2000/svg";
+        const parentSvg = svgGroup.ownerSVGElement;
+        if (parentSvg) {
+          let defs = parentSvg.querySelector("defs");
+          if (!defs) {
+            defs = document.createElementNS(svgNS, "defs");
+            parentSvg.prepend(defs);
+          }
+
+          const clipId = "ntfyFlyoutClip";
+          if (!defs.querySelector(`#${clipId}`)) {
+            const clipPath = document.createElementNS(svgNS, "clipPath");
+            clipPath.setAttribute("id", clipId);
+            const clipRect = document.createElementNS(svgNS, "rect");
+            clipRect.setAttribute("x", "0");
+            clipRect.setAttribute("y", "0");
+            clipRect.setAttribute("width", String((flyout.width_ || 300) + 20));
+            clipRect.setAttribute("height", String(maxVisibleHeight));
+            clipPath.appendChild(clipRect);
+            defs.appendChild(clipPath);
+          }
+
+          svgGroup.setAttribute("clip-path", `url(#${clipId})`);
+
+          // Resize flyout background path
+          const bgPath = svgGroup.querySelector(".blocklyFlyoutBackground");
+          if (bgPath) {
+            const w = (flyout.width_ || 250) - 8;
+            bgPath.setAttribute(
+              "d",
+              `M 0,0 h ${w} a 8 8 0 0 1 8 8 v ${
+                maxVisibleHeight - 16
+              } a 8 8 0 0 1 -8 8 h -${w} z`,
+            );
+          }
+
+          // Resize parent SVG height
+          parentSvg.setAttribute("height", `${maxVisibleHeight}px`);
+        }
+
+        // Find the flyout workspace block canvas
+        const flyoutWs = svgGroup.querySelector(".blocklyWorkspace");
+        const blockCanvas = flyoutWs
+          ? flyoutWs.querySelector(".blocklyBlockCanvas")
+          : null;
+        if (!blockCanvas) {
+          return;
+        }
+
+        let scrollY = 0;
+        const maxScroll = Math.max(0, contentHeight - maxVisibleHeight + 20);
+
+        const resetScroll = () => {
+          scrollY = 0;
+          blockCanvas.setAttribute("transform", "translate(0, 0) scale(1)");
+        };
+        svgGroup._ntfyResetScroll = resetScroll;
+
+        svgGroup.addEventListener(
+          "wheel",
+          (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            scrollY = Math.max(
+              0,
+              Math.min(maxScroll, scrollY + e.deltaY * 0.5),
+            );
+            blockCanvas.setAttribute(
+              "transform",
+              `translate(0, ${-scrollY}) scale(1)`,
+            );
+          },
+          { passive: false },
+        );
       };
 
       // Flyout Live-Update
@@ -696,67 +766,12 @@ if (typeof Blockly !== "undefined") {
         }
       });
 
-      // Initial scroll setup + debug logging
+      // Initial scroll setup
       setTimeout(() => {
         const flyout = workspace.getFlyout
           ? workspace.getFlyout()
           : workspace.flyout_;
         enableFlyoutScroll(flyout);
-
-        // Debug: Log mutator and flyout structure
-        console.log("ntfy-sh DEBUG: mutator object:", this.mutator);
-        console.log(
-          "ntfy-sh DEBUG: mutator keys:",
-          this.mutator ? Object.keys(this.mutator) : "null",
-        );
-
-        if (this.mutator && this.mutator.bubble_) {
-          const bubble = this.mutator.bubble_;
-          console.log("ntfy-sh DEBUG: bubble:", bubble);
-          console.log(
-            "ntfy-sh DEBUG: bubble proto:",
-            Object.getOwnPropertyNames(Object.getPrototypeOf(bubble)),
-          );
-
-          // Try to resize the bubble
-          try {
-            if (typeof bubble.setSize === "function") {
-              bubble.setSize({ width: 500, height: 600 });
-              console.log("ntfy-sh DEBUG: bubble.setSize() called");
-            }
-          } catch (e) {
-            console.log("ntfy-sh DEBUG: bubble.setSize failed:", e);
-          }
-          try {
-            if (typeof bubble.setBubbleSize === "function") {
-              bubble.setBubbleSize(500, 600);
-              console.log("ntfy-sh DEBUG: bubble.setBubbleSize() called");
-            }
-          } catch (e) {
-            console.log("ntfy-sh DEBUG: bubble.setBubbleSize failed:", e);
-          }
-        }
-
-        if (flyout) {
-          console.log("ntfy-sh DEBUG: flyout:", flyout);
-          console.log(
-            "ntfy-sh DEBUG: flyout proto:",
-            Object.getOwnPropertyNames(Object.getPrototypeOf(flyout)),
-          );
-          console.log("ntfy-sh DEBUG: flyout.scrollbar_:", flyout.scrollbar_);
-          console.log("ntfy-sh DEBUG: flyout.svgGroup_:", flyout.svgGroup_);
-          console.log("ntfy-sh DEBUG: flyout.height_:", flyout.height_);
-          console.log(
-            "ntfy-sh DEBUG: flyout.contentArea_:",
-            flyout.getClientRect ? flyout.getClientRect() : "no getClientRect",
-          );
-        }
-
-        console.log("ntfy-sh DEBUG: workspace:", workspace);
-        console.log(
-          "ntfy-sh DEBUG: workspace proto:",
-          Object.getOwnPropertyNames(Object.getPrototypeOf(workspace)),
-        );
       }, 200);
 
       return containerBlock;
@@ -796,11 +811,14 @@ if (typeof Blockly !== "undefined") {
       // Verbinde Blöcke wieder
       for (const attrName of this.attributes_) {
         if (connections[attrName]) {
-          Blockly.icons.MutatorIcon.reconnect(
-            connections[attrName],
-            this,
-            attrName,
-          );
+          const input = this.getInput(attrName);
+          if (input && input.connection) {
+            try {
+              input.connection.connect(connections[attrName]);
+            } catch (e) {
+              // Connection might be incompatible, ignore
+            }
+          }
         }
       }
     },
