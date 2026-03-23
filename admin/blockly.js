@@ -618,8 +618,25 @@ if (typeof Blockly !== "undefined") {
       const containerBlock = workspace.newBlock("ntfy_mutator_container");
       containerBlock.initSvg();
 
-      // Reference for height capping the inner SVG content (not the frame)
+      // Cap bubble height via monkey-patch of setSize.
+      // Blockly calls setSize on every interaction – by capping here,
+      // the frame, inner SVG, and background path all stay in sync.
       const maxBubbleHeight = Math.max(300, window.innerHeight * 0.45);
+      const bubble = this.mutator && this.mutator.miniWorkspaceBubble;
+      if (
+        bubble &&
+        typeof bubble.setSize === "function" &&
+        !bubble._ntfyPatched
+      ) {
+        bubble._ntfyPatched = true;
+        const origSetSize = bubble.setSize.bind(bubble);
+        bubble.setSize = (size) => {
+          if (size && size.height > maxBubbleHeight) {
+            size = { width: size.width, height: maxBubbleHeight };
+          }
+          origSetSize(size);
+        };
+      }
 
       let connection = containerBlock.getInput("STACK").connection;
 
@@ -635,65 +652,17 @@ if (typeof Blockly !== "undefined") {
       // Simple helper: cap inner SVG content and enable wheel scrolling.
       // Called AFTER Blockly finishes rendering so we don't interfere.
       const capBubbleAndScroll = () => {
-        // Cap the inner workspace SVG and the bubble frame visuals.
         const flyout = workspace.getFlyout
           ? workspace.getFlyout()
           : workspace.flyout_;
         if (!flyout || !flyout.svgGroup_) {
           return;
         }
+
+        // Ensure overflow hidden on inner SVG
         const innerSvg = flyout.svgGroup_.ownerSVGElement;
-        if (!innerSvg) {
-          return;
-        }
-
-        const cappedH = maxBubbleHeight - 12;
-
-        // Helper: persistently cap a DOM element's height attribute
-        const capElementHeight = (el, maxH, label) => {
-          const apply = () => {
-            const h = parseInt(el.getAttribute("height"), 10) || 0;
-            if (h > maxH) {
-              el.setAttribute("height", `${maxH}px`);
-            }
-          };
-          apply();
-
-          if (!el[`_ntfyCap_${label}`]) {
-            el[`_ntfyCap_${label}`] = true;
-            let capping = false;
-            const obs = new MutationObserver(() => {
-              if (capping) {
-                return;
-              }
-              capping = true;
-              apply();
-              capping = false;
-            });
-            obs.observe(el, {
-              attributes: true,
-              attributeFilter: ["height"],
-            });
-          }
-        };
-
-        // 1) Cap the inner SVG (clips the flyout content)
-        innerSvg.style.overflow = "hidden";
-        capElementHeight(innerSvg, cappedH, "svg");
-
-        // 2) Cap the bubble frame (border/background elements)
-        // These are siblings of the inner SVG in the bubble's DOM group.
-        const bubbleGroup = innerSvg.parentElement;
-        if (bubbleGroup) {
-          for (const el of bubbleGroup.children) {
-            if (el === innerSvg) {
-              continue;
-            }
-            // Cap both rect and svg elements that form the bubble border
-            if (el.tagName === "rect" || el.tagName === "svg") {
-              capElementHeight(el, cappedH + 12, el.tagName);
-            }
-          }
+        if (innerSvg) {
+          innerSvg.style.overflow = "hidden";
         }
 
         const svgGroup = flyout.svgGroup_;
