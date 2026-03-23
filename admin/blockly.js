@@ -631,122 +631,51 @@ if (typeof Blockly !== "undefined") {
         }
       });
 
-      // Monkey-patch the Mutator workspace metrics so Blockly itself natively
-      // computes and draws a smaller bubble frame, avoiding overlap and sizing issues.
-      if (!workspace._ntfyPatchedMetrics) {
-        workspace._ntfyPatchedMetrics = true;
-
-        // Cap workspace blocks bounding box
-        if (typeof workspace.getBlocksBoundingBox === "function") {
-          const origBox = workspace.getBlocksBoundingBox.bind(workspace);
-          workspace.getBlocksBoundingBox = function () {
-            const bbox = origBox();
-            if (bbox && bbox.bottom - bbox.top > maxBubbleHeight - 30) {
-              bbox.bottom = bbox.top + maxBubbleHeight - 30;
-            }
-            return bbox;
-          };
-        }
-
-        // Cap flyout metrics which contribute to the final bubble size
-        const flyout = workspace.getFlyout
-          ? workspace.getFlyout()
-          : workspace.flyout_;
-        if (flyout) {
-          if (typeof flyout.getMetrics_ === "function") {
-            const origFlyMet = flyout.getMetrics_.bind(flyout);
-            flyout.getMetrics_ = function () {
-              const m = origFlyMet();
-              if (m && m.contentHeight > maxBubbleHeight - 30) {
-                m.contentHeight = maxBubbleHeight - 30;
-              }
-              return m;
-            };
-          } else if (typeof flyout.getMetrics === "function") {
-            const origFlyMet = flyout.getMetrics.bind(flyout);
-            flyout.getMetrics = function () {
-              const m = origFlyMet();
-              if (m && m.contentHeight > maxBubbleHeight - 30) {
-                m.contentHeight = maxBubbleHeight - 30;
-              }
-              return m;
-            };
-          }
-
-          // Mutator.resizeBubble_ in many Blockly versions directly reads
-          // flyout.height_ to determine the final bubble height.
-          // Intercepting this property allows us to dynamically cap the height
-          // reported to the Mutator without breaking internal state.
-          if (!flyout._ntfyPatchedHeightProp) {
-            flyout._ntfyPatchedHeightProp = true;
-            let realHeight = flyout.height_ || 0;
-            try {
-              Object.defineProperty(flyout, "height_", {
-                get: function () {
-                  return Math.min(realHeight, maxBubbleHeight - 30);
-                },
-                set: function (val) {
-                  realHeight = val;
-                },
-              });
-            } catch (e) {
-              // Ignore if already defined or not configurable
-            }
-          }
-        }
-
-        // Blockly Mutator internally reads size directly using the SVG
-        // elements' getBBox() in older or certain versions.
-        const capBBox = (element) => {
-          if (
-            element &&
-            typeof element.getBBox === "function" &&
-            !element._ntfyPatchedBBox
-          ) {
-            element._ntfyPatchedBBox = true;
-            const orig = element.getBBox.bind(element);
-            element.getBBox = function () {
-              const bbox = orig();
-              if (bbox && bbox.height > maxBubbleHeight - 30) {
-                return {
-                  x: bbox.x,
-                  y: bbox.y,
-                  width: bbox.width,
-                  height: maxBubbleHeight - 30,
-                  top: bbox.y,
-                  bottom: bbox.y + maxBubbleHeight - 30,
-                  left: bbox.x,
-                  right: bbox.x + bbox.width,
-                };
-              }
-              return bbox;
-            };
-          }
-        };
-
-        if (typeof workspace.getCanvas === "function") {
-          capBBox(workspace.getCanvas());
-        }
-        if (typeof workspace.getBubbleCanvas === "function") {
-          capBBox(workspace.getBubbleCanvas());
-        }
-        if (flyout && flyout.svgGroup_) {
-          capBBox(flyout.svgGroup_);
-        }
-      }
-
-      // Simple helper: cap inner SVG content visually and enable wheel scrolling.
-      // Called AFTER Blockly finishes rendering so we don't interfere.
+      // Simple helper: cap bubble frame visually via SVG clip-path and enable wheel scrolling.
+      // We don't monkey-patch Blockly's size calculations because doing so breaks
+      // its position layout (e.g. overlapping the gear icon). Instead, Blockly
+      // calculates the full layout correctly, and we simply chop off the bottom
+      // of the drawn bubble cleanly to our max height limit.
       const capBubbleAndScroll = () => {
         const flyout = workspace.getFlyout
           ? workspace.getFlyout()
           : workspace.flyout_;
-        if (!flyout || !flyout.svgGroup_) {
+        const bubble = this.mutator && this.mutator.bubble_;
+        if (!flyout || !flyout.svgGroup_ || !bubble || !bubble.svgGroup_) {
           return;
         }
 
-        // The inner SVG receives the actual clipping enforcement,
-        // ensuring the overflowing parameters are hidden.
+        // 1) Clip the entire Bubble group to visually squash the pink frame
+        const bubbleGroup = bubble.svgGroup_;
+        const ownerSvg = bubbleGroup.ownerSVGElement;
+        if (ownerSvg) {
+          let defs = ownerSvg.querySelector("defs");
+          if (!defs) {
+            defs = Blockly.utils.xml.createElement("defs");
+            ownerSvg.insertBefore(defs, ownerSvg.firstChild);
+          }
+          const clipId = `ntfy_bubble_clip_${workspace.id || "mut"}`;
+          let clipPath = defs.querySelector(`#${clipId}`);
+          if (!clipPath) {
+            clipPath = Blockly.utils.xml.createElement("clipPath");
+            clipPath.setAttribute("id", clipId);
+            const clipRect = Blockly.utils.xml.createElement("rect");
+            // Cover the left, right, and top arrows, but crop at maxBubbleHeight (bottom limits)
+            clipRect.setAttribute("x", "-2000");
+            clipRect.setAttribute("y", "-2000");
+            clipRect.setAttribute("width", "5000");
+            clipPath.appendChild(clipRect);
+            defs.appendChild(clipPath);
+            bubbleGroup.setAttribute("clip-path", `url(#${clipId})`);
+          }
+          // Dynamically adjust crop line
+          const clipRect = clipPath.querySelector("rect");
+          if (clipRect) {
+            clipRect.setAttribute("height", String(2000 + maxBubbleHeight));
+          }
+        }
+
+        // 2) Keep the inner SVG capped natively to ensure scroll clipping
         const innerSvg = flyout.svgGroup_.ownerSVGElement;
         if (innerSvg) {
           const cappedH = maxBubbleHeight - 12;
