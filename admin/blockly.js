@@ -631,94 +631,71 @@ if (typeof Blockly !== "undefined") {
         }
       });
 
-      // Simple helper: cap inner SVG content and enable wheel scrolling.
-      // Called AFTER Blockly finishes rendering so we don't interfere.
-      const capBubbleAndScroll = () => {
+      // Helper: Arrange the flyout blocks into a multi-column grid!
+      // This is the cleanest native solution: it halves the height by placing
+      // blocks in two columns, avoiding any clipping or bubble overlap issues.
+      const applyGridFlyout = () => {
         const flyout = workspace.getFlyout
           ? workspace.getFlyout()
           : workspace.flyout_;
-        if (!flyout || !flyout.svgGroup_) {
+        if (!flyout || typeof flyout.position !== "function") {
           return;
         }
 
-        // Cap the inner SVG height and enforce clipping.
-        // The bubble frame stays at Blockly's natural size (no positioning
-        // issues), but the flyout content is clipped within this limit.
-        const innerSvg = flyout.svgGroup_.ownerSVGElement;
-        if (innerSvg) {
-          const cappedH = maxBubbleHeight - 12;
-          innerSvg.style.overflow = "hidden";
-          const h = parseInt(innerSvg.getAttribute("height"), 10) || 0;
-          if (h > cappedH) {
-            innerSvg.setAttribute("height", `${cappedH}px`);
-          }
+        if (!flyout._ntfyPatchedLayout) {
+          flyout._ntfyPatchedLayout = true;
+          // In Blockly, flyout.position() recalculates layout and dimensions.
+          // In some versions layout_ is called directly, but we can patch position().
+          const origPosition = flyout.position.bind(flyout);
+          flyout.position = function () {
+            // Let Blockly do its core positioning/sizing first
+            origPosition();
 
-          // Persistently re-cap on every Blockly resize
-          if (!innerSvg._ntfyObserver) {
-            let capping = false;
-            const obs = new MutationObserver(() => {
-              if (capping) {
-                return;
-              }
-              const curH = parseInt(innerSvg.getAttribute("height"), 10) || 0;
-              if (curH > cappedH) {
-                capping = true;
-                innerSvg.setAttribute("height", `${cappedH}px`);
-                capping = false;
-              }
+            const blocks = this.workspace_.getTopBlocks(false);
+            if (!blocks || blocks.length === 0) {
+              return;
+            }
+
+            const margin = this.MARGIN || 10;
+            const gapY = this.GAP_Y || 10;
+            const colWidth = 140; // width of a typical mutator parameter block + padding
+
+            // Calculate Grid Layout (2 columns)
+            let colYs = [margin, margin];
+            let maxH = 0;
+
+            blocks.forEach((block) => {
+              const hw = block.getHeightWidth();
+              // Pick the column with the least height so far
+              const curCol = colYs[0] <= colYs[1] ? 0 : 1;
+
+              const targetX = margin + curCol * colWidth;
+              const targetY = colYs[curCol];
+
+              const currentPos = block.getRelativeToSurfaceXY();
+              const dx = targetX - currentPos.x;
+              const dy = targetY - currentPos.y;
+
+              // Move block smoothly to column position
+              block.moveBy(dx, dy);
+
+              colYs[curCol] += hw.height + gapY;
             });
-            obs.observe(innerSvg, {
-              attributes: true,
-              attributeFilter: ["height"],
-            });
-            innerSvg._ntfyObserver = obs;
-          }
-        }
 
-        const svgGroup = flyout.svgGroup_;
-        const contentHeight = flyout.height_ || 0;
-        const visibleHeight = maxBubbleHeight - 12;
-        const maxScroll = Math.max(0, contentHeight - visibleHeight);
+            maxH = Math.max(colYs[0], colYs[1]) + margin;
 
-        // Store scroll limits and reset position
-        svgGroup._ntfyMaxScroll = maxScroll;
-        svgGroup._ntfyScrollY = 0;
-        const flyoutWs = svgGroup.querySelector(".blocklyWorkspace");
-        const blockCanvas = flyoutWs
-          ? flyoutWs.querySelector(".blocklyBlockCanvas")
-          : null;
-        if (blockCanvas) {
-          blockCanvas.setAttribute("transform", "translate(0, 0) scale(1)");
-        }
+            // Update flyout internal dimensions so the mutator bubble naturally wraps it
+            this.width_ = margin * 2 + colWidth * 2;
+            this.height_ = maxH;
 
-        // Attach wheel handler only once
-        if (!svgGroup._ntfyWheelAttached) {
-          svgGroup._ntfyWheelAttached = true;
-          svgGroup.addEventListener(
-            "wheel",
-            (e) => {
-              const max = svgGroup._ntfyMaxScroll || 0;
-              if (max <= 0) {
-                return;
-              }
-              e.preventDefault();
-              e.stopPropagation();
-
-              let scrollY = svgGroup._ntfyScrollY || 0;
-              scrollY = Math.max(0, Math.min(max, scrollY + e.deltaY * 0.5));
-              svgGroup._ntfyScrollY = scrollY;
-
-              const ws = svgGroup.querySelector(".blocklyWorkspace");
-              const bc = ws ? ws.querySelector(".blocklyBlockCanvas") : null;
-              if (bc) {
-                bc.setAttribute(
-                  "transform",
-                  `translate(0, ${-scrollY}) scale(1)`,
-                );
-              }
-            },
-            { passive: false },
-          );
+            // Update the flyout background bounding box
+            if (this.svgBackground_) {
+              this.svgBackground_.setAttribute("width", String(this.width_));
+              this.svgBackground_.setAttribute("height", String(this.height_));
+              const rectPath = `M 0,0 h ${this.width_} v ${this.height_} h -${this.width_} z`;
+              this.svgBackground_.setAttribute("d", rectPath);
+            }
+          };
         }
       };
 
@@ -745,14 +722,14 @@ if (typeof Blockly !== "undefined") {
             });
             flyout.show(xmlList);
 
-            // Cap bubble + update scroll after Blockly re-renders
-            setTimeout(capBubbleAndScroll, 100);
+            // Re-apply grid layout after Blockly re-renders
+            setTimeout(applyGridFlyout, 50);
           }
         }
       });
 
       // Initial setup after Blockly finishes rendering
-      setTimeout(capBubbleAndScroll, 300);
+      setTimeout(applyGridFlyout, 50);
 
       return containerBlock;
     },
