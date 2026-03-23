@@ -622,6 +622,23 @@ if (typeof Blockly !== "undefined") {
       const bubble = this.mutator && this.mutator.miniWorkspaceBubble;
       const maxBubbleHeight = Math.max(300, window.innerHeight * 0.45);
 
+      // Monkey-patch setSize to persistently cap the bubble frame height.
+      // Blockly calls setSize on every interaction (click, drag, reflow).
+      if (
+        bubble &&
+        typeof bubble.setSize === "function" &&
+        !bubble._ntfyPatched
+      ) {
+        bubble._ntfyPatched = true;
+        const originalSetSize = bubble.setSize.bind(bubble);
+        bubble.setSize = (size) => {
+          if (size && size.height > maxBubbleHeight) {
+            size = { width: size.width, height: maxBubbleHeight };
+          }
+          originalSetSize(size);
+        };
+      }
+
       let connection = containerBlock.getInput("STACK").connection;
 
       this.attributes_.forEach((attr) => {
