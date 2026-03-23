@@ -479,6 +479,8 @@ if (typeof Blockly !== "undefined") {
     },
   };
   const ntfyMutatorOptions = [
+    { key: "message", word: "ntfy_message" },
+    { key: "topic", word: "ntfy_topic" },
     { key: "title", word: "ntfy_title" },
     { key: "priority", word: "ntfy_priority" },
     { key: "tags", word: "ntfy_tags" },
@@ -518,13 +520,13 @@ if (typeof Blockly !== "undefined") {
 
   Blockly.Sendto.blocks["ntfy"] =
     '<block type="ntfy">' +
-    '  <mutation xmlns="http://www.w3.org/1999/xhtml" items="title,priority,tags,icon,click,actions,attach,attach_file,filename"></mutation>' +
-    '  <value name="MESSAGE">' +
+    '  <mutation xmlns="http://www.w3.org/1999/xhtml" items="message,topic,title,priority,tags,icon,click,actions,attach,attach_file,filename"></mutation>' +
+    '  <value name="message">' +
     '    <shadow type="text">' +
     '      <field name="TEXT">Hello from ioBroker</field>' +
     "    </shadow>" +
     "  </value>" +
-    '  <value name="TOPIC">' +
+    '  <value name="topic">' +
     '    <shadow type="text">' +
     '      <field name="TEXT">my-topic</field>' +
     "    </shadow>" +
@@ -573,16 +575,10 @@ if (typeof Blockly !== "undefined") {
           "INSTANCE",
         );
 
-      this.appendValueInput("MESSAGE")
-        .setCheck("String")
-        .appendField(Blockly.Words["ntfy_message"][systemLang]);
-
-      this.appendValueInput("TOPIC")
-        .setCheck("String")
-        .appendField(Blockly.Words["ntfy_topic"][systemLang]);
-
       // Initiale Attribute setzen
       this.attributes_ = [
+        "message",
+        "topic",
         "title",
         "priority",
         "tags",
@@ -901,25 +897,10 @@ if (typeof Blockly !== "undefined") {
 
   Blockly.JavaScript["ntfy"] = function (block) {
     const dropdown_instance = block.getFieldValue("INSTANCE");
-    const value_message = Blockly.JavaScript.valueToCode(
-      block,
-      "MESSAGE",
-      Blockly.JavaScript.ORDER_ATOMIC,
-    );
-    const value_topic = Blockly.JavaScript.valueToCode(
-      block,
-      "TOPIC",
-      Blockly.JavaScript.ORDER_ATOMIC,
-    );
-
     const instance = dropdown_instance
       ? `"${dropdown_instance}"`
       : '"ntfy-sh.0"';
     const args = [];
-
-    // Die beiden Pflichtfelder
-    args.push({ attr: "message", val: value_message });
-    args.push({ attr: "topic", val: value_topic });
 
     // Alle dynamischen Mutator-Felder abgreifen
     for (const attrName of block.attributes_) {
