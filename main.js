@@ -983,12 +983,6 @@ class Ntfy extends utils.Adapter {
       throw new Error("Topic is required to send a notification.");
     }
 
-    // Default message text if empty (like HA)
-    if (!text) {
-      text = "triggered";
-      this.log.debug("No message text specified, using default: 'triggered'");
-    }
-
     const url = (this.config.url || "https://ntfy.sh").replace(/\/+$/, "");
 
     if (attach && attachFile) {
