@@ -696,13 +696,68 @@ if (typeof Blockly !== "undefined") {
         }
       });
 
-      // Initial scroll setup
+      // Initial scroll setup + debug logging
       setTimeout(() => {
         const flyout = workspace.getFlyout
           ? workspace.getFlyout()
           : workspace.flyout_;
         enableFlyoutScroll(flyout);
-      }, 100);
+
+        // Debug: Log mutator and flyout structure
+        console.log("ntfy-sh DEBUG: mutator object:", this.mutator);
+        console.log(
+          "ntfy-sh DEBUG: mutator keys:",
+          this.mutator ? Object.keys(this.mutator) : "null",
+        );
+
+        if (this.mutator && this.mutator.bubble_) {
+          const bubble = this.mutator.bubble_;
+          console.log("ntfy-sh DEBUG: bubble:", bubble);
+          console.log(
+            "ntfy-sh DEBUG: bubble proto:",
+            Object.getOwnPropertyNames(Object.getPrototypeOf(bubble)),
+          );
+
+          // Try to resize the bubble
+          try {
+            if (typeof bubble.setSize === "function") {
+              bubble.setSize({ width: 500, height: 600 });
+              console.log("ntfy-sh DEBUG: bubble.setSize() called");
+            }
+          } catch (e) {
+            console.log("ntfy-sh DEBUG: bubble.setSize failed:", e);
+          }
+          try {
+            if (typeof bubble.setBubbleSize === "function") {
+              bubble.setBubbleSize(500, 600);
+              console.log("ntfy-sh DEBUG: bubble.setBubbleSize() called");
+            }
+          } catch (e) {
+            console.log("ntfy-sh DEBUG: bubble.setBubbleSize failed:", e);
+          }
+        }
+
+        if (flyout) {
+          console.log("ntfy-sh DEBUG: flyout:", flyout);
+          console.log(
+            "ntfy-sh DEBUG: flyout proto:",
+            Object.getOwnPropertyNames(Object.getPrototypeOf(flyout)),
+          );
+          console.log("ntfy-sh DEBUG: flyout.scrollbar_:", flyout.scrollbar_);
+          console.log("ntfy-sh DEBUG: flyout.svgGroup_:", flyout.svgGroup_);
+          console.log("ntfy-sh DEBUG: flyout.height_:", flyout.height_);
+          console.log(
+            "ntfy-sh DEBUG: flyout.contentArea_:",
+            flyout.getClientRect ? flyout.getClientRect() : "no getClientRect",
+          );
+        }
+
+        console.log("ntfy-sh DEBUG: workspace:", workspace);
+        console.log(
+          "ntfy-sh DEBUG: workspace proto:",
+          Object.getOwnPropertyNames(Object.getPrototypeOf(workspace)),
+        );
+      }, 200);
 
       return containerBlock;
     },
