@@ -629,6 +629,44 @@ if (typeof Blockly !== "undefined") {
         }
       });
 
+      // Helper: Enable flyout scrolling (wheel + scrollbar)
+      const enableFlyoutScroll = (flyout) => {
+        if (!flyout) {
+          return;
+        }
+
+        // Force scrollbar visibility
+        if (
+          flyout.scrollbar_ &&
+          typeof flyout.scrollbar_.setVisible === "function"
+        ) {
+          flyout.scrollbar_.setVisible(true);
+        }
+
+        // Recalculate flyout metrics so the scrollbar knows the content height
+        if (typeof flyout.position === "function") {
+          flyout.position();
+        }
+
+        // Add wheel event support for scrolling
+        const svgGroup = flyout.svgGroup_;
+        if (svgGroup && !svgGroup._ntfyWheelAttached) {
+          svgGroup._ntfyWheelAttached = true;
+          svgGroup.addEventListener(
+            "wheel",
+            (e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              if (flyout.scrollbar_) {
+                const current = flyout.scrollbar_.get();
+                flyout.scrollbar_.set(current + e.deltaY);
+              }
+            },
+            { passive: false },
+          );
+        }
+      };
+
       // Flyout Live-Update
       workspace.addChangeListener((e) => {
         if (
@@ -651,9 +689,20 @@ if (typeof Blockly !== "undefined") {
               return block;
             });
             flyout.show(xmlList);
+
+            // Re-enable scrolling after flyout content update
+            setTimeout(() => enableFlyoutScroll(flyout), 50);
           }
         }
       });
+
+      // Initial scroll setup
+      setTimeout(() => {
+        const flyout = workspace.getFlyout
+          ? workspace.getFlyout()
+          : workspace.flyout_;
+        enableFlyoutScroll(flyout);
+      }, 100);
 
       return containerBlock;
     },
