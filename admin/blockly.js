@@ -618,6 +618,39 @@ if (typeof Blockly !== "undefined") {
       const containerBlock = workspace.newBlock("ntfy_mutator_container");
       containerBlock.initSvg();
 
+      // Monkey-patch the MiniWorkspaceBubble's setSize to cap the height.
+      // This is the definitive fix: it intercepts ALL Blockly-internal
+      // size recalculations and prevents the bubble from growing
+      // beyond a reasonable portion of the viewport.
+      const maxBubbleHeight = Math.max(300, window.innerHeight * 0.45);
+      const bubble = this.mutator && this.mutator.miniWorkspaceBubble;
+      if (
+        bubble &&
+        typeof bubble.setSize === "function" &&
+        !bubble._ntfyPatched
+      ) {
+        bubble._ntfyPatched = true;
+        const originalSetSize = bubble.setSize.bind(bubble);
+        bubble.setSize = (size) => {
+          if (size && size.height > maxBubbleHeight) {
+            size = { width: size.width, height: maxBubbleHeight };
+          }
+          originalSetSize(size);
+        };
+        // Apply cap immediately
+        try {
+          const currentSize = bubble.getSize();
+          if (currentSize && currentSize.height > maxBubbleHeight) {
+            bubble.setSize({
+              width: currentSize.width,
+              height: maxBubbleHeight,
+            });
+          }
+        } catch (_e) {
+          // ignore
+        }
+      }
+
       let connection = containerBlock.getInput("STACK").connection;
 
       this.attributes_.forEach((attr) => {
@@ -710,26 +743,8 @@ if (typeof Blockly !== "undefined") {
             clipId,
           };
 
-          // MutationObserver: Persistently cap the parent SVG height
-          // This prevents Blockly from resizing the bubble beyond our limit.
-          let resizing = false;
-          const observer = new MutationObserver(() => {
-            if (resizing || !svgGroup._ntfyState.active) {
-              return;
-            }
-            const h = parseInt(parentSvg.getAttribute("height"), 10);
-            if (h > maxVisibleHeight) {
-              resizing = true;
-              parentSvg.setAttribute("height", `${maxVisibleHeight}px`);
-              requestAnimationFrame(() => {
-                resizing = false;
-              });
-            }
-          });
-          observer.observe(parentSvg, {
-            attributes: true,
-            attributeFilter: ["height"],
-          });
+          // Note: Bubble height is capped via the monkey-patched
+          // miniWorkspaceBubble.setSize() in decompose.
 
           // Wheel event handler
           svgGroup.addEventListener(
