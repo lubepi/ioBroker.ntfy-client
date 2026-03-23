@@ -618,25 +618,7 @@ if (typeof Blockly !== "undefined") {
       const containerBlock = workspace.newBlock("ntfy_mutator_container");
       containerBlock.initSvg();
 
-      // Cap bubble height via monkey-patch of setSize.
-      // Blockly calls setSize on every interaction – by capping here,
-      // the frame, inner SVG, and background path all stay in sync.
       const maxBubbleHeight = Math.max(300, window.innerHeight * 0.45);
-      const bubble = this.mutator && this.mutator.miniWorkspaceBubble;
-      if (
-        bubble &&
-        typeof bubble.setSize === "function" &&
-        !bubble._ntfyPatched
-      ) {
-        bubble._ntfyPatched = true;
-        const origSetSize = bubble.setSize.bind(bubble);
-        bubble.setSize = (size) => {
-          if (size && size.height > maxBubbleHeight) {
-            size = { width: size.width, height: maxBubbleHeight };
-          }
-          origSetSize(size);
-        };
-      }
 
       let connection = containerBlock.getInput("STACK").connection;
 
@@ -659,10 +641,38 @@ if (typeof Blockly !== "undefined") {
           return;
         }
 
-        // Ensure overflow hidden on inner SVG
+        // Cap the inner SVG height and enforce clipping.
+        // The bubble frame stays at Blockly's natural size (no positioning
+        // issues), but the flyout content is clipped within this limit.
         const innerSvg = flyout.svgGroup_.ownerSVGElement;
         if (innerSvg) {
+          const cappedH = maxBubbleHeight - 12;
           innerSvg.style.overflow = "hidden";
+          const h = parseInt(innerSvg.getAttribute("height"), 10) || 0;
+          if (h > cappedH) {
+            innerSvg.setAttribute("height", `${cappedH}px`);
+          }
+
+          // Persistently re-cap on every Blockly resize
+          if (!innerSvg._ntfyObserver) {
+            let capping = false;
+            const obs = new MutationObserver(() => {
+              if (capping) {
+                return;
+              }
+              const curH = parseInt(innerSvg.getAttribute("height"), 10) || 0;
+              if (curH > cappedH) {
+                capping = true;
+                innerSvg.setAttribute("height", `${cappedH}px`);
+                capping = false;
+              }
+            });
+            obs.observe(innerSvg, {
+              attributes: true,
+              attributeFilter: ["height"],
+            });
+            innerSvg._ntfyObserver = obs;
+          }
         }
 
         const svgGroup = flyout.svgGroup_;
