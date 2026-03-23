@@ -638,38 +638,37 @@ if (typeof Blockly !== "undefined") {
         }
 
         const svgGroup = flyout.svgGroup_;
-
-        // Prevent duplicate setup
-        if (svgGroup._ntfyScrollSetup) {
-          // Reset scroll position on flyout content change
-          if (svgGroup._ntfyResetScroll) {
-            svgGroup._ntfyResetScroll();
-          }
-          return;
-        }
-        svgGroup._ntfyScrollSetup = true;
-
+        const svgNS = "http://www.w3.org/2000/svg";
         const contentHeight = flyout.height_ || 600;
         const maxVisibleHeight = Math.min(
           contentHeight,
           Math.max(300, window.innerHeight * 0.45),
         );
+        const needsScroll = contentHeight > maxVisibleHeight;
 
-        // No scrolling needed if all content fits
-        if (contentHeight <= maxVisibleHeight) {
-          return;
-        }
+        // --- First-time setup (event listeners, DOM elements) ---
+        if (!svgGroup._ntfyScrollSetup) {
+          svgGroup._ntfyScrollSetup = true;
 
-        // Create SVG clipPath to limit visible flyout area
-        const svgNS = "http://www.w3.org/2000/svg";
-        const parentSvg = svgGroup.ownerSVGElement;
-        if (parentSvg) {
+          const parentSvg = svgGroup.ownerSVGElement;
+          const flyoutWs = svgGroup.querySelector(".blocklyWorkspace");
+          const blockCanvas = flyoutWs
+            ? flyoutWs.querySelector(".blocklyBlockCanvas")
+            : null;
+          if (!blockCanvas || !parentSvg) {
+            return;
+          }
+
+          // Scroll state
+          const state = { scrollY: 0, maxScroll: 0, active: false };
+          svgGroup._ntfyState = state;
+
+          // Create clip-path
           let defs = parentSvg.querySelector("defs");
           if (!defs) {
             defs = document.createElementNS(svgNS, "defs");
             parentSvg.prepend(defs);
           }
-
           const clipId = "ntfyFlyoutClip";
           if (!defs.querySelector(`#${clipId}`)) {
             const clipPath = document.createElementNS(svgNS, "clipPath");
@@ -678,14 +677,122 @@ if (typeof Blockly !== "undefined") {
             clipRect.setAttribute("x", "0");
             clipRect.setAttribute("y", "0");
             clipRect.setAttribute("width", String((flyout.width_ || 300) + 20));
-            clipRect.setAttribute("height", String(maxVisibleHeight));
+            clipRect.setAttribute("height", "9999");
             clipPath.appendChild(clipRect);
             defs.appendChild(clipPath);
           }
 
-          svgGroup.setAttribute("clip-path", `url(#${clipId})`);
+          // Create scroll indicator elements
+          const scrollTrack = document.createElementNS(svgNS, "rect");
+          scrollTrack.setAttribute("x", String((flyout.width_ || 250) - 10));
+          scrollTrack.setAttribute("y", "8");
+          scrollTrack.setAttribute("width", "4");
+          scrollTrack.setAttribute("rx", "2");
+          scrollTrack.setAttribute("fill", "rgba(255,255,255,0.1)");
+          scrollTrack.style.display = "none";
+          svgGroup.appendChild(scrollTrack);
 
-          // Resize flyout background path
+          const scrollThumb = document.createElementNS(svgNS, "rect");
+          scrollThumb.setAttribute("x", String((flyout.width_ || 250) - 10));
+          scrollThumb.setAttribute("y", "8");
+          scrollThumb.setAttribute("width", "4");
+          scrollThumb.setAttribute("rx", "2");
+          scrollThumb.setAttribute("fill", "rgba(255,255,255,0.35)");
+          scrollThumb.style.display = "none";
+          svgGroup.appendChild(scrollThumb);
+
+          // Store element references
+          svgGroup._ntfyEls = {
+            blockCanvas,
+            parentSvg,
+            scrollTrack,
+            scrollThumb,
+            clipId,
+          };
+
+          // MutationObserver: Persistently cap the parent SVG height
+          // This prevents Blockly from resizing the bubble beyond our limit.
+          let resizing = false;
+          const observer = new MutationObserver(() => {
+            if (resizing || !svgGroup._ntfyState.active) {
+              return;
+            }
+            const h = parseInt(parentSvg.getAttribute("height"), 10);
+            if (h > maxVisibleHeight) {
+              resizing = true;
+              parentSvg.setAttribute("height", `${maxVisibleHeight}px`);
+              requestAnimationFrame(() => {
+                resizing = false;
+              });
+            }
+          });
+          observer.observe(parentSvg, {
+            attributes: true,
+            attributeFilter: ["height"],
+          });
+
+          // Wheel event handler
+          svgGroup.addEventListener(
+            "wheel",
+            (e) => {
+              const s = svgGroup._ntfyState;
+              if (!s.active) {
+                return;
+              }
+              e.preventDefault();
+              e.stopPropagation();
+
+              s.scrollY = Math.max(
+                0,
+                Math.min(s.maxScroll, s.scrollY + e.deltaY * 0.5),
+              );
+
+              const els = svgGroup._ntfyEls;
+              els.blockCanvas.setAttribute(
+                "transform",
+                `translate(0, ${-s.scrollY}) scale(1)`,
+              );
+
+              // Update scroll thumb position
+              const trackH =
+                parseInt(els.scrollTrack.getAttribute("height"), 10) || 100;
+              const thumbH =
+                parseInt(els.scrollThumb.getAttribute("height"), 10) || 30;
+              const thumbY =
+                s.maxScroll > 0
+                  ? 8 + (s.scrollY / s.maxScroll) * (trackH - thumbH)
+                  : 8;
+              els.scrollThumb.setAttribute("y", String(thumbY));
+            },
+            { passive: false },
+          );
+        }
+
+        // --- Update on every call (handles content changes) ---
+        const state = svgGroup._ntfyState;
+        const els = svgGroup._ntfyEls;
+        if (!state || !els) {
+          return;
+        }
+
+        // Reset scroll
+        state.scrollY = 0;
+        state.active = needsScroll;
+        state.maxScroll = Math.max(0, contentHeight - maxVisibleHeight + 20);
+        els.blockCanvas.setAttribute("transform", "translate(0, 0) scale(1)");
+
+        if (needsScroll) {
+          // Apply clip and resize
+          svgGroup.setAttribute("clip-path", `url(#${els.clipId})`);
+          els.parentSvg.setAttribute("height", `${maxVisibleHeight}px`);
+
+          // Update clip rect height
+          const clipRect = els.parentSvg.querySelector(`#${els.clipId} rect`);
+          if (clipRect) {
+            clipRect.setAttribute("height", String(maxVisibleHeight));
+          }
+
+          // Resize flyout background
           const bgPath = svgGroup.querySelector(".blocklyFlyoutBackground");
           if (bgPath) {
             const w = (flyout.width_ || 250) - 8;
@@ -697,44 +804,23 @@ if (typeof Blockly !== "undefined") {
             );
           }
 
-          // Resize parent SVG height
-          parentSvg.setAttribute("height", `${maxVisibleHeight}px`);
+          // Show and size scroll indicators
+          const trackH = maxVisibleHeight - 16;
+          const thumbH = Math.max(
+            20,
+            trackH * (maxVisibleHeight / (state.maxScroll + maxVisibleHeight)),
+          );
+          els.scrollTrack.setAttribute("height", String(trackH));
+          els.scrollTrack.style.display = "block";
+          els.scrollThumb.setAttribute("height", String(thumbH));
+          els.scrollThumb.setAttribute("y", "8");
+          els.scrollThumb.style.display = "block";
+        } else {
+          // No scrolling needed – remove constraints
+          svgGroup.removeAttribute("clip-path");
+          els.scrollTrack.style.display = "none";
+          els.scrollThumb.style.display = "none";
         }
-
-        // Find the flyout workspace block canvas
-        const flyoutWs = svgGroup.querySelector(".blocklyWorkspace");
-        const blockCanvas = flyoutWs
-          ? flyoutWs.querySelector(".blocklyBlockCanvas")
-          : null;
-        if (!blockCanvas) {
-          return;
-        }
-
-        let scrollY = 0;
-        const maxScroll = Math.max(0, contentHeight - maxVisibleHeight + 20);
-
-        const resetScroll = () => {
-          scrollY = 0;
-          blockCanvas.setAttribute("transform", "translate(0, 0) scale(1)");
-        };
-        svgGroup._ntfyResetScroll = resetScroll;
-
-        svgGroup.addEventListener(
-          "wheel",
-          (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            scrollY = Math.max(
-              0,
-              Math.min(maxScroll, scrollY + e.deltaY * 0.5),
-            );
-            blockCanvas.setAttribute(
-              "transform",
-              `translate(0, ${-scrollY}) scale(1)`,
-            );
-          },
-          { passive: false },
-        );
       };
 
       // Flyout Live-Update

@@ -29,6 +29,8 @@ export default [
       globals: {
         window: "readonly",
         document: "readonly",
+        MutationObserver: "readonly",
+        requestAnimationFrame: "readonly",
       },
     },
     rules: {
