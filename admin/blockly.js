@@ -661,6 +661,29 @@ if (typeof Blockly !== "undefined") {
           const cappedH = maxBubbleHeight - 12;
           innerSvg.setAttribute("height", `${cappedH}px`);
           innerSvg.style.overflow = "hidden";
+
+          // Persistently cap: Blockly recalculates the SVG height on
+          // every interaction (click, drag). This observer catches that
+          // and immediately resets it.
+          if (!innerSvg._ntfyObserver) {
+            let capping = false;
+            const obs = new MutationObserver(() => {
+              if (capping) {
+                return;
+              }
+              const h = parseInt(innerSvg.getAttribute("height"), 10) || 0;
+              if (h > cappedH) {
+                capping = true;
+                innerSvg.setAttribute("height", `${cappedH}px`);
+                capping = false;
+              }
+            });
+            obs.observe(innerSvg, {
+              attributes: true,
+              attributeFilter: ["height"],
+            });
+            innerSvg._ntfyObserver = obs;
+          }
         }
 
         const svgGroup = flyout.svgGroup_;
