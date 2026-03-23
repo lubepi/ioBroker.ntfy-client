@@ -635,8 +635,7 @@ if (typeof Blockly !== "undefined") {
       // Simple helper: cap inner SVG content and enable wheel scrolling.
       // Called AFTER Blockly finishes rendering so we don't interfere.
       const capBubbleAndScroll = () => {
-        // 2) Also cap the inner workspace SVG and force clipping.
-        // bubble.setSize() only resizes the frame, not the content viewport.
+        // Cap the inner workspace SVG and the bubble frame visuals.
         const flyout = workspace.getFlyout
           ? workspace.getFlyout()
           : workspace.flyout_;
@@ -644,32 +643,56 @@ if (typeof Blockly !== "undefined") {
           return;
         }
         const innerSvg = flyout.svgGroup_.ownerSVGElement;
-        if (innerSvg) {
-          const cappedH = maxBubbleHeight - 12;
-          innerSvg.setAttribute("height", `${cappedH}px`);
-          innerSvg.style.overflow = "hidden";
+        if (!innerSvg) {
+          return;
+        }
 
-          // Persistently cap: Blockly recalculates the SVG height on
-          // every interaction (click, drag). This observer catches that
-          // and immediately resets it.
-          if (!innerSvg._ntfyObserver) {
+        const cappedH = maxBubbleHeight - 12;
+
+        // Helper: persistently cap a DOM element's height attribute
+        const capElementHeight = (el, maxH, label) => {
+          const apply = () => {
+            const h = parseInt(el.getAttribute("height"), 10) || 0;
+            if (h > maxH) {
+              el.setAttribute("height", `${maxH}px`);
+            }
+          };
+          apply();
+
+          if (!el[`_ntfyCap_${label}`]) {
+            el[`_ntfyCap_${label}`] = true;
             let capping = false;
             const obs = new MutationObserver(() => {
               if (capping) {
                 return;
               }
-              const h = parseInt(innerSvg.getAttribute("height"), 10) || 0;
-              if (h > cappedH) {
-                capping = true;
-                innerSvg.setAttribute("height", `${cappedH}px`);
-                capping = false;
-              }
+              capping = true;
+              apply();
+              capping = false;
             });
-            obs.observe(innerSvg, {
+            obs.observe(el, {
               attributes: true,
               attributeFilter: ["height"],
             });
-            innerSvg._ntfyObserver = obs;
+          }
+        };
+
+        // 1) Cap the inner SVG (clips the flyout content)
+        innerSvg.style.overflow = "hidden";
+        capElementHeight(innerSvg, cappedH, "svg");
+
+        // 2) Cap the bubble frame (border/background elements)
+        // These are siblings of the inner SVG in the bubble's DOM group.
+        const bubbleGroup = innerSvg.parentElement;
+        if (bubbleGroup) {
+          for (const el of bubbleGroup.children) {
+            if (el === innerSvg) {
+              continue;
+            }
+            // Cap both rect and svg elements that form the bubble border
+            if (el.tagName === "rect" || el.tagName === "svg") {
+              capElementHeight(el, cappedH + 12, el.tagName);
+            }
           }
         }
 
