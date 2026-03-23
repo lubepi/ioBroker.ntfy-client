@@ -618,38 +618,9 @@ if (typeof Blockly !== "undefined") {
       const containerBlock = workspace.newBlock("ntfy_mutator_container");
       containerBlock.initSvg();
 
-      // Monkey-patch the MiniWorkspaceBubble's setSize to cap the height.
-      // This is the definitive fix: it intercepts ALL Blockly-internal
-      // size recalculations and prevents the bubble from growing
-      // beyond a reasonable portion of the viewport.
-      const maxBubbleHeight = Math.max(300, window.innerHeight * 0.45);
+      // Store bubble reference for height capping after render
       const bubble = this.mutator && this.mutator.miniWorkspaceBubble;
-      if (
-        bubble &&
-        typeof bubble.setSize === "function" &&
-        !bubble._ntfyPatched
-      ) {
-        bubble._ntfyPatched = true;
-        const originalSetSize = bubble.setSize.bind(bubble);
-        bubble.setSize = (size) => {
-          if (size && size.height > maxBubbleHeight) {
-            size = { width: size.width, height: maxBubbleHeight };
-          }
-          originalSetSize(size);
-        };
-        // Apply cap immediately
-        try {
-          const currentSize = bubble.getSize();
-          if (currentSize && currentSize.height > maxBubbleHeight) {
-            bubble.setSize({
-              width: currentSize.width,
-              height: maxBubbleHeight,
-            });
-          }
-        } catch (_e) {
-          // ignore
-        }
-      }
+      const maxBubbleHeight = Math.max(300, window.innerHeight * 0.45);
 
       let connection = containerBlock.getInput("STACK").connection;
 
@@ -662,179 +633,73 @@ if (typeof Blockly !== "undefined") {
         }
       });
 
-      // Helper: Enable flyout scrolling via SVG clip-path + wheel events.
-      // The Blockly mutator flyout has no native scrollbar in this version,
-      // so we clip the visible area and scroll the block canvas via transform.
-      const enableFlyoutScroll = (flyout) => {
+      // Simple helper: cap bubble height and enable wheel scrolling.
+      // Called AFTER Blockly finishes rendering so we don't interfere.
+      const capBubbleAndScroll = () => {
+        // 1) Cap the bubble height (SVG viewport clips overflow naturally)
+        if (bubble && typeof bubble.setSize === "function") {
+          try {
+            const size = bubble.getSize();
+            if (size && size.height > maxBubbleHeight) {
+              bubble.setSize({ width: size.width, height: maxBubbleHeight });
+            }
+          } catch (_e) {
+            // ignore
+          }
+        }
+
+        // 2) Set up flyout wheel scrolling (attach handler only once)
+        const flyout = workspace.getFlyout
+          ? workspace.getFlyout()
+          : workspace.flyout_;
         if (!flyout || !flyout.svgGroup_) {
           return;
         }
 
         const svgGroup = flyout.svgGroup_;
-        const svgNS = "http://www.w3.org/2000/svg";
-        const contentHeight = flyout.height_ || 600;
-        const maxVisibleHeight = Math.min(
-          contentHeight,
-          Math.max(300, window.innerHeight * 0.45),
-        );
-        const needsScroll = contentHeight > maxVisibleHeight;
+        const contentHeight = flyout.height_ || 0;
+        const visibleHeight = maxBubbleHeight - 12;
+        const maxScroll = Math.max(0, contentHeight - visibleHeight);
 
-        // --- First-time setup (event listeners, DOM elements) ---
-        if (!svgGroup._ntfyScrollSetup) {
-          svgGroup._ntfyScrollSetup = true;
+        // Store scroll limits and reset position
+        svgGroup._ntfyMaxScroll = maxScroll;
+        svgGroup._ntfyScrollY = 0;
+        const flyoutWs = svgGroup.querySelector(".blocklyWorkspace");
+        const blockCanvas = flyoutWs
+          ? flyoutWs.querySelector(".blocklyBlockCanvas")
+          : null;
+        if (blockCanvas) {
+          blockCanvas.setAttribute("transform", "translate(0, 0) scale(1)");
+        }
 
-          const parentSvg = svgGroup.ownerSVGElement;
-          const flyoutWs = svgGroup.querySelector(".blocklyWorkspace");
-          const blockCanvas = flyoutWs
-            ? flyoutWs.querySelector(".blocklyBlockCanvas")
-            : null;
-          if (!blockCanvas || !parentSvg) {
-            return;
-          }
-
-          // Scroll state
-          const state = { scrollY: 0, maxScroll: 0, active: false };
-          svgGroup._ntfyState = state;
-
-          // Create clip-path
-          let defs = parentSvg.querySelector("defs");
-          if (!defs) {
-            defs = document.createElementNS(svgNS, "defs");
-            parentSvg.prepend(defs);
-          }
-          const clipId = "ntfyFlyoutClip";
-          if (!defs.querySelector(`#${clipId}`)) {
-            const clipPath = document.createElementNS(svgNS, "clipPath");
-            clipPath.setAttribute("id", clipId);
-            const clipRect = document.createElementNS(svgNS, "rect");
-            clipRect.setAttribute("x", "0");
-            clipRect.setAttribute("y", "0");
-            clipRect.setAttribute("width", String((flyout.width_ || 300) + 20));
-            clipRect.setAttribute("height", "9999");
-            clipPath.appendChild(clipRect);
-            defs.appendChild(clipPath);
-          }
-
-          // Create scroll indicator elements
-          const scrollTrack = document.createElementNS(svgNS, "rect");
-          scrollTrack.setAttribute("x", String((flyout.width_ || 250) - 10));
-          scrollTrack.setAttribute("y", "8");
-          scrollTrack.setAttribute("width", "4");
-          scrollTrack.setAttribute("rx", "2");
-          scrollTrack.setAttribute("fill", "rgba(255,255,255,0.1)");
-          scrollTrack.style.display = "none";
-          svgGroup.appendChild(scrollTrack);
-
-          const scrollThumb = document.createElementNS(svgNS, "rect");
-          scrollThumb.setAttribute("x", String((flyout.width_ || 250) - 10));
-          scrollThumb.setAttribute("y", "8");
-          scrollThumb.setAttribute("width", "4");
-          scrollThumb.setAttribute("rx", "2");
-          scrollThumb.setAttribute("fill", "rgba(255,255,255,0.35)");
-          scrollThumb.style.display = "none";
-          svgGroup.appendChild(scrollThumb);
-
-          // Store element references
-          svgGroup._ntfyEls = {
-            blockCanvas,
-            parentSvg,
-            scrollTrack,
-            scrollThumb,
-            clipId,
-          };
-
-          // Note: Bubble height is capped via the monkey-patched
-          // miniWorkspaceBubble.setSize() in decompose.
-
-          // Wheel event handler
+        // Attach wheel handler only once
+        if (!svgGroup._ntfyWheelAttached) {
+          svgGroup._ntfyWheelAttached = true;
           svgGroup.addEventListener(
             "wheel",
             (e) => {
-              const s = svgGroup._ntfyState;
-              if (!s.active) {
+              const max = svgGroup._ntfyMaxScroll || 0;
+              if (max <= 0) {
                 return;
               }
               e.preventDefault();
               e.stopPropagation();
 
-              s.scrollY = Math.max(
-                0,
-                Math.min(s.maxScroll, s.scrollY + e.deltaY * 0.5),
-              );
+              let scrollY = svgGroup._ntfyScrollY || 0;
+              scrollY = Math.max(0, Math.min(max, scrollY + e.deltaY * 0.5));
+              svgGroup._ntfyScrollY = scrollY;
 
-              const els = svgGroup._ntfyEls;
-              els.blockCanvas.setAttribute(
-                "transform",
-                `translate(0, ${-s.scrollY}) scale(1)`,
-              );
-
-              // Update scroll thumb position
-              const trackH =
-                parseInt(els.scrollTrack.getAttribute("height"), 10) || 100;
-              const thumbH =
-                parseInt(els.scrollThumb.getAttribute("height"), 10) || 30;
-              const thumbY =
-                s.maxScroll > 0
-                  ? 8 + (s.scrollY / s.maxScroll) * (trackH - thumbH)
-                  : 8;
-              els.scrollThumb.setAttribute("y", String(thumbY));
+              const ws = svgGroup.querySelector(".blocklyWorkspace");
+              const bc = ws ? ws.querySelector(".blocklyBlockCanvas") : null;
+              if (bc) {
+                bc.setAttribute(
+                  "transform",
+                  `translate(0, ${-scrollY}) scale(1)`,
+                );
+              }
             },
             { passive: false },
           );
-        }
-
-        // --- Update on every call (handles content changes) ---
-        const state = svgGroup._ntfyState;
-        const els = svgGroup._ntfyEls;
-        if (!state || !els) {
-          return;
-        }
-
-        // Reset scroll
-        state.scrollY = 0;
-        state.active = needsScroll;
-        state.maxScroll = Math.max(0, contentHeight - maxVisibleHeight + 20);
-        els.blockCanvas.setAttribute("transform", "translate(0, 0) scale(1)");
-
-        if (needsScroll) {
-          // Apply clip and resize
-          svgGroup.setAttribute("clip-path", `url(#${els.clipId})`);
-          els.parentSvg.setAttribute("height", `${maxVisibleHeight}px`);
-
-          // Update clip rect height
-          const clipRect = els.parentSvg.querySelector(`#${els.clipId} rect`);
-          if (clipRect) {
-            clipRect.setAttribute("height", String(maxVisibleHeight));
-          }
-
-          // Resize flyout background
-          const bgPath = svgGroup.querySelector(".blocklyFlyoutBackground");
-          if (bgPath) {
-            const w = (flyout.width_ || 250) - 8;
-            bgPath.setAttribute(
-              "d",
-              `M 0,0 h ${w} a 8 8 0 0 1 8 8 v ${
-                maxVisibleHeight - 16
-              } a 8 8 0 0 1 -8 8 h -${w} z`,
-            );
-          }
-
-          // Show and size scroll indicators
-          const trackH = maxVisibleHeight - 16;
-          const thumbH = Math.max(
-            20,
-            trackH * (maxVisibleHeight / (state.maxScroll + maxVisibleHeight)),
-          );
-          els.scrollTrack.setAttribute("height", String(trackH));
-          els.scrollTrack.style.display = "block";
-          els.scrollThumb.setAttribute("height", String(thumbH));
-          els.scrollThumb.setAttribute("y", "8");
-          els.scrollThumb.style.display = "block";
-        } else {
-          // No scrolling needed – remove constraints
-          svgGroup.removeAttribute("clip-path");
-          els.scrollTrack.style.display = "none";
-          els.scrollThumb.style.display = "none";
         }
       };
 
@@ -861,19 +726,14 @@ if (typeof Blockly !== "undefined") {
             });
             flyout.show(xmlList);
 
-            // Re-enable scrolling after flyout content update
-            setTimeout(() => enableFlyoutScroll(flyout), 50);
+            // Cap bubble + update scroll after Blockly re-renders
+            setTimeout(capBubbleAndScroll, 100);
           }
         }
       });
 
-      // Initial scroll setup
-      setTimeout(() => {
-        const flyout = workspace.getFlyout
-          ? workspace.getFlyout()
-          : workspace.flyout_;
-        enableFlyoutScroll(flyout);
-      }, 200);
+      // Initial setup after Blockly finishes rendering
+      setTimeout(capBubbleAndScroll, 300);
 
       return containerBlock;
     },
