@@ -813,7 +813,7 @@ if (typeof Blockly !== "undefined") {
 
         // 3) Manage visual scrollbar
         if (ownerSvg) {
-          let sbGroup = ownerSvg.querySelector(".ntfy-scrollbar");
+          let sbGroup = svgGroup.querySelector(".ntfy-scrollbar");
           if (maxScroll > 0) {
             if (!sbGroup) {
               sbGroup = Blockly.utils.xml.createElement("g");
@@ -821,7 +821,7 @@ if (typeof Blockly !== "undefined") {
 
               const track = Blockly.utils.xml.createElement("rect");
               track.setAttribute("class", "ntfy-scrollbar-track");
-              track.setAttribute("fill", "rgba(0, 0, 0, 0.1)");
+              track.setAttribute("fill", "rgba(0, 0, 0, 0.2)");
               track.setAttribute("width", "6");
               track.setAttribute("rx", "3");
               track.setAttribute("ry", "3");
@@ -829,34 +829,21 @@ if (typeof Blockly !== "undefined") {
 
               const thumb = Blockly.utils.xml.createElement("rect");
               thumb.setAttribute("class", "ntfy-scrollbar-thumb");
-              thumb.setAttribute("fill", "rgba(0, 0, 0, 0.4)");
+              thumb.setAttribute("fill", "rgba(0, 0, 0, 0.5)");
               thumb.setAttribute("width", "6");
               thumb.setAttribute("rx", "3");
               thumb.setAttribute("ry", "3");
               sbGroup.appendChild(thumb);
 
-              // Append to the root SVG so it isn't masked by our clip-path
-              ownerSvg.appendChild(sbGroup);
+              svgGroup.appendChild(sbGroup);
             }
 
             const track = sbGroup.querySelector(".ntfy-scrollbar-track");
             const thumb = sbGroup.querySelector(".ntfy-scrollbar-thumb");
 
             const w = flyout.width_ || 200;
-            // Get the X/Y translation of the flyout svgGroup to position the scrollbar relative to it
-            let dx = 0,
-              dy = 0;
-            const tf = svgGroup.getAttribute("transform") || "";
-            const match = tf.match(/translate\(([-\d.]+),\s*([-.\d]+)\)/);
-            if (match) {
-              dx = parseFloat(match[1]);
-              dy = parseFloat(match[2]);
-            }
-
-            sbGroup.setAttribute(
-              "transform",
-              `translate(${dx + w - 12}, ${dy + 5})`,
-            );
+            // Position relative to flyout internal coordinates (no translation regex needed!)
+            sbGroup.setAttribute("transform", `translate(${w - 14}, 5)`);
 
             const trackHeight = maxVisibleHeight - 10;
             track.setAttribute("height", String(trackHeight));
