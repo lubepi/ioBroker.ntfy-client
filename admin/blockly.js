@@ -520,7 +520,7 @@ if (typeof Blockly !== "undefined") {
 
   Blockly.Sendto.blocks["ntfy"] =
     '<block type="ntfy">' +
-    '  <mutation xmlns="http://www.w3.org/1999/xhtml" items="message,topic,title,priority,tags,icon,click,actions,attach,attach_file,filename"></mutation>' +
+    '  <mutation xmlns="http://www.w3.org/1999/xhtml" items="message,topic,title,priority"></mutation>' +
     '  <value name="message">' +
     '    <shadow type="text">' +
     '      <field name="TEXT">Hello from ioBroker</field>' +
@@ -576,19 +576,7 @@ if (typeof Blockly !== "undefined") {
         );
 
       // Initiale Attribute setzen
-      this.attributes_ = [
-        "message",
-        "topic",
-        "title",
-        "priority",
-        "tags",
-        "icon",
-        "click",
-        "actions",
-        "attach",
-        "attach_file",
-        "filename",
-      ];
+      this.attributes_ = ["message", "topic", "title", "priority"];
 
       this.updateMutator_();
       this.updateShape_();
