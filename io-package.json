@@ -4,8 +4,8 @@
     "version": "0.1.0",
     "news": {
       "0.1.0": {
-        "en": "Initial implementation with full ntfy.sh support. Features include: Topics subscription (SSE), account statistics, rich publishing options (Click, Attach, Filename, Email, Call, Actions, etc.), dismiss/delete notifications, and Blockly support.",
-        "de": "Erstveröffentlichung mit vollem ntfy.sh Support. Funktionen: Topics abonnieren (SSE), Kontostatistiken, umfangreiche Publishing-Optionen (Click, Attach, Filename, Email, Call, Actions, etc.), Benachrichtigungen verwerfen/löschen und Blockly-Unterstützung.",
+        "en": "Initial implementation of the unofficial ntfy.sh client adapter. Features include: Topics subscription (SSE), account statistics, rich publishing options (Click, Attach, Filename, Email, Call, Actions, etc.), dismiss/delete notifications, and Blockly support.",
+        "de": "Erstveröffentlichung des inoffiziellen ntfy.sh client Adapters. Funktionen: Topics abonnieren (SSE), Kontostatistiken, umfangreiche Publishing-Optionen (Click, Attach, Filename, Email, Call, Actions, etc.), Benachrichtigungen verwerfen/löschen und Blockly-Unterstützung.",
         "ru": "Первоначальная реализация с полной поддержкой ntfy.sh. Особенности включают: подписку на темы (SSE), статистику аккаунта, богатые возможности публикации (щелчок, вложение, имя файла, адрес электронной почты, вызов, действия и т. д.), отклонение/удаление уведомлений и поддержку Blockly.",
         "pt": "Implementação inicial com suporte total ao ntfy.sh. Os recursos incluem: assinatura de tópicos (SSE), estatísticas da conta, ricas opções de publicação (clique, anexo, nome de arquivo, e-mail, chamada, ações, etc.), dispensa/exclusão de notificações e suporte Blockly.",
         "nl": "Eerste implementatie met volledige ntfy.sh ondersteuning. Functies omvatten: abonnement op onderwerpen (SSE), accountstatistieken, uitgebreide publicatie-opties (klikken, bijvoegen, bestandsnaam, e-mail, oproep, acties, enz.), meldingen negeren/verwijderen en Blockly-onderstütuning.",
@@ -18,30 +18,30 @@
       }
     },
     "titleLang": {
-      "en": "ntfy",
-      "de": "ntfy",
-      "ru": "ntfy",
-      "pt": "ntfy",
-      "nl": "ntfy",
-      "fr": "ntfy",
-      "it": "ntfy",
-      "es": "ntfy",
-      "pl": "ntfy",
-      "uk": "ntfy",
-      "zh-cn": "ntfy"
+      "en": "ntfy client (Unofficial)",
+      "de": "ntfy client (Inoffiziell)",
+      "ru": "ntfy клиент (Неофициальный)",
+      "pt": "cliente ntfy (Não oficial)",
+      "nl": "ntfy client (Onofficieel)",
+      "fr": "client ntfy (Officieux)",
+      "it": "cliente ntfy (Non ufficiale)",
+      "es": "cliente ntfy (Extraoficial)",
+      "pl": "klient ntfy (Nieoficjalny)",
+      "uk": "клієнт ntfy (Неофіційний)",
+      "zh-cn": "ntfy 客户端 (非官方)"
     },
     "desc": {
-      "en": "Unofficial ntfy.sh adapter for ioBroker",
-      "de": "Inoffizieller ntfy.sh Adapter für ioBroker",
-      "ru": "Неофициальный адаптер ntfy.sh для ioBroker",
-      "pt": "Adaptador ntfy.sh não oficial para ioBroker",
-      "nl": "Onofficiële ntfy.sh adapter voor ioBroker",
-      "fr": "Adaptateur ntfy.sh non officiel pour ioBroker",
-      "it": "Adattatore ntfy.sh non ufficiale per ioBroker",
-      "es": "Adaptador ntfy.sh no oficial para ioBroker",
-      "pl": "Nieoficjalny adapter ntfy.sh dla ioBroker",
-      "uk": "Неофіційний адаптер ntfy.sh для ioBroker",
-      "zh-cn": "ioBroker 的非官方 ntfy.sh 适配器"
+      "en": "Unofficial ntfy.sh client adapter for ioBroker",
+      "de": "Inoffizieller ntfy.sh client Adapter für ioBroker",
+      "ru": "Неофициальный клиентский адаптер ntfy.sh для ioBroker",
+      "pt": "Adaptador cliente ntfy.sh não oficial para ioBroker",
+      "nl": "Onofficiële ntfy.sh client adapter voor ioBroker",
+      "fr": "Adaptateur client ntfy.sh non officiel pour ioBroker",
+      "it": "Adattatore client ntfy.sh non ufficiale per ioBroker",
+      "es": "Adaptador de cliente ntfy.sh no oficial para ioBroker",
+      "pl": "Nieoficjalny adapter klienta ntfy.sh dla ioBroker",
+      "uk": "Неофіційний клієнтський адаптер ntfy.sh для ioBroker",
+      "zh-cn": "ioBroker 的非官方 ntfy.sh 客户端适配器"
     },
     "authors": [
       "lubepi"

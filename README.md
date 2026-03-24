@@ -1,7 +1,7 @@
 ![Logo](admin/ntfy-client.png)
 # ioBroker.ntfy-client
 
-## Unofficial ntfy.sh adapter for ioBroker
+## Unofficial ntfy.sh client adapter for ioBroker
 
 Send and receive notifications via [ntfy.sh](https://ntfy.sh) directly from ioBroker. This adapter is a community project and not affiliated with ntfy LLC.
 

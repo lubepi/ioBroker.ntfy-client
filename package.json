@@ -1,7 +1,7 @@
 {
   "name": "iobroker.ntfy-client",
   "version": "0.1.0",
-  "description": "ntfy.sh adapter for ioBroker",
+  "description": "Unofficial ntfy.sh client adapter for ioBroker",
   "author": {
     "name": "lubepi"
   },
