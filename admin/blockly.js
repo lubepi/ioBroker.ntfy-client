@@ -999,8 +999,16 @@ if (typeof Blockly !== "undefined") {
               flyout.show(xmlList);
             }
 
-            // Always update scroll/clip dimensions as workspace block positions may have changed
-            setTimeout(capBubbleAndScroll, 50);
+            // Always update scroll/clip dimensions as workspace block positions may have changed.
+            // But skip this evaluation if a block is currently in mid-air being actively dragged!
+            // When picked up, the workspace canvas shrinks instantly, but the overall bubble frame
+            // doesn't adjust until the block is dropped. Premature recalculation during drag breaks the layout.
+            if (
+              !document.querySelector(".blocklyDragging") &&
+              (typeof Blockly.dragMode_ !== "number" || Blockly.dragMode_ === 0)
+            ) {
+              setTimeout(capBubbleAndScroll, 50);
+            }
           }
         }
       });
