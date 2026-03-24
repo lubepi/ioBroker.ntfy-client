@@ -773,16 +773,6 @@ if (typeof Blockly !== "undefined") {
           if (clipRect) {
             clipRect.setAttribute("height", String(maxVisibleHeight));
           }
-
-          // Also cap the flyout's dark background path to the same height
-          if (flyout.svgBackground_) {
-            const w = flyout.width_ || 200;
-            const r = flyout.CORNER_RADIUS || 8;
-            if (w > r) {
-              const rectPath = `M 0,0 h ${w} a ${r} ${r} 0 0 1 ${r} ${r} v ${maxVisibleHeight - r * 2} a ${r} ${r} 0 0 1 -${r} ${r} h -${w} z`;
-              flyout.svgBackground_.setAttribute("d", rectPath);
-            }
-          }
         }
 
         // 2) Attach Wheel Scroll Handler
@@ -816,14 +806,10 @@ if (typeof Blockly !== "undefined") {
         // IMPORTANT: The scrollbar must be mounted OUTSIDE the clipped svgGroup,
         // otherwise our clip-path will hide it. We mount it to the parent SVG
         // and position it absolutely using the flyout group's transform.
-        // We also use document.createElementNS (not Blockly.utils.xml.createElement)
-        // because Blockly's helper creates elements in an XML namespace that
-        // browsers may not render as visible SVG.
         const svgNS = "http://www.w3.org/2000/svg";
         if (ownerSvg) {
           let sbGroup = ownerSvg.querySelector(".ntfy-scrollbar");
           if (maxScroll > 0) {
-            // Calculate absolute position of the flyout in ownerSvg coordinates
             let flyoutX = 0;
             let flyoutY = 0;
             const tf = svgGroup.getAttribute("transform") || "";
@@ -901,21 +887,14 @@ if (typeof Blockly !== "undefined") {
                   );
                 };
 
-                // Apply immediately
                 updateThemeColors();
 
-                // Bind to live mutations (e.g. ioBroker dark mode toggle)
+                // Observe only the background SVG locally so it gc's cleanly when destroyed
                 const obs = new MutationObserver(updateThemeColors);
                 obs.observe(flyout.svgBackground_, {
                   attributes: true,
                   attributeFilter: ["fill", "style", "class"],
                 });
-                if (window.document.body) {
-                  obs.observe(window.document.body, {
-                    attributes: true,
-                    attributeFilter: ["class", "data-theme"],
-                  });
-                }
 
                 svgGroup._ntfyThemeObserver = obs;
               }
@@ -924,8 +903,6 @@ if (typeof Blockly !== "undefined") {
             const track = sbGroup.querySelector(".ntfy-scrollbar-track");
             const thumb = sbGroup.querySelector(".ntfy-scrollbar-thumb");
 
-            // Position scrollbar at the right edge of the flyout, slightly inset
-            // Added larger top/bottom margins so it doesn't touch the flyout frame
             sbGroup.setAttribute(
               "transform",
               `translate(${flyoutX + flyoutW - 10}, ${flyoutY + 12})`,
