@@ -73,7 +73,7 @@ class Ntfy extends utils.Adapter {
     await this.fetchAccountStats();
 
     // Start periodic stats update (every 15 minutes like HA)
-    this.statsInterval = setInterval(
+    this.statsInterval = this.setInterval(
       () => this.fetchAccountStats(),
       15 * 60 * 1000,
     );
@@ -83,7 +83,7 @@ class Ntfy extends utils.Adapter {
     await this.checkServerVersion();
 
     // Start periodic version check (every 6 hours)
-    this.versionCheckInterval = setInterval(
+    this.versionCheckInterval = this.setInterval(
       () => this.checkServerVersion(),
       6 * 60 * 60 * 1000,
     );
@@ -863,11 +863,11 @@ class Ntfy extends utils.Adapter {
 
       // Clear intervals
       if (this.statsInterval) {
-        clearInterval(this.statsInterval);
+        this.clearInterval(this.statsInterval);
         this.statsInterval = null;
       }
       if (this.versionCheckInterval) {
-        clearInterval(this.versionCheckInterval);
+        this.clearInterval(this.versionCheckInterval);
         this.versionCheckInterval = null;
       }
 
