@@ -789,13 +789,16 @@ if (typeof Blockly !== "undefined") {
         let contentHeight = 0;
         if (flyout.workspace_) {
           const topBlocks = flyout.workspace_.getTopBlocks(false);
-          if (topBlocks.length > 0) {
-            const lastBlock = topBlocks[topBlocks.length - 1];
-            if (lastBlock && typeof lastBlock.getHeightWidth === "function") {
-              const pos = lastBlock.getRelativeToSurfaceXY();
-              const hw = lastBlock.getHeightWidth();
-              contentHeight = pos.y + hw.height + 20; // 20px padding at bottom
+          let maxY = 0;
+          topBlocks.forEach((b) => {
+            if (b && typeof b.getHeightWidth === "function") {
+              const pos = b.getRelativeToSurfaceXY();
+              const hw = b.getHeightWidth();
+              maxY = Math.max(maxY, pos.y + hw.height);
             }
+          });
+          if (maxY > 0) {
+            contentHeight = maxY + 20; // 20px padding at bottom
           }
         }
 
