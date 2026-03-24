@@ -925,12 +925,13 @@ if (typeof Blockly !== "undefined") {
             const thumb = sbGroup.querySelector(".ntfy-scrollbar-thumb");
 
             // Position scrollbar at the right edge of the flyout, slightly inset
+            // Added larger top/bottom margins so it doesn't touch the flyout frame
             sbGroup.setAttribute(
               "transform",
-              `translate(${flyoutX + flyoutW - 10}, ${flyoutY + 4})`,
+              `translate(${flyoutX + flyoutW - 10}, ${flyoutY + 12})`,
             );
 
-            const trackHeight = maxVisibleHeight - 8;
+            const trackHeight = maxVisibleHeight - 24;
             track.setAttribute("height", String(trackHeight));
 
             const thumbHeight = Math.max(
