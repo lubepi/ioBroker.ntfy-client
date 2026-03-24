@@ -812,7 +812,6 @@ if (typeof Blockly !== "undefined") {
         }
 
         // 3) Manage visual scrollbar
-        const ownerSvg = svgGroup.ownerSVGElement;
         if (ownerSvg) {
           let sbGroup = ownerSvg.querySelector(".ntfy-scrollbar");
           if (maxScroll > 0) {
