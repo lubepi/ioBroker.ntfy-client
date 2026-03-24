@@ -786,10 +786,19 @@ if (typeof Blockly !== "undefined") {
         }
 
         // 2) Attach Wheel Scroll Handler
-        const contentHeight =
-          typeof flyout.getRealContentHeight === "function"
-            ? flyout.getRealContentHeight()
-            : 0;
+        let contentHeight = 0;
+        if (flyout.workspace_) {
+          const topBlocks = flyout.workspace_.getTopBlocks(false);
+          if (topBlocks.length > 0) {
+            const lastBlock = topBlocks[topBlocks.length - 1];
+            if (lastBlock && typeof lastBlock.getHeightWidth === "function") {
+              const pos = lastBlock.getRelativeToSurfaceXY();
+              const hw = lastBlock.getHeightWidth();
+              contentHeight = pos.y + hw.height + 20; // 20px padding at bottom
+            }
+          }
+        }
+
         const maxScroll = Math.max(0, contentHeight - maxVisibleHeight);
 
         svgGroup._ntfyMaxScroll = maxScroll;
