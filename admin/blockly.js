@@ -813,17 +813,35 @@ if (typeof Blockly !== "undefined") {
         }
 
         // 3) Manage visual scrollbar
+        // IMPORTANT: The scrollbar must be mounted OUTSIDE the clipped svgGroup,
+        // otherwise our clip-path will hide it. We mount it to the parent SVG
+        // and position it absolutely using the flyout group's transform.
+        // We also use document.createElementNS (not Blockly.utils.xml.createElement)
+        // because Blockly's helper creates elements in an XML namespace that
+        // browsers may not render as visible SVG.
+        const svgNS = "http://www.w3.org/2000/svg";
         if (ownerSvg) {
-          let sbGroup = svgGroup.querySelector(".ntfy-scrollbar");
+          let sbGroup = ownerSvg.querySelector(".ntfy-scrollbar");
           if (maxScroll > 0) {
+            // Calculate absolute position of the flyout in ownerSvg coordinates
+            let flyoutX = 0;
+            let flyoutY = 0;
+            const tf = svgGroup.getAttribute("transform") || "";
+            const tMatch = tf.match(/translate\(\s*([-\d.]+)[,\s]+([-\d.]+)/);
+            if (tMatch) {
+              flyoutX = parseFloat(tMatch[1]);
+              flyoutY = parseFloat(tMatch[2]);
+            }
+            const flyoutW = flyout.width_ || 200;
+
             if (!sbGroup) {
-              sbGroup = Blockly.utils.xml.createElement("g");
+              sbGroup = document.createElementNS(svgNS, "g");
               sbGroup.setAttribute("class", "ntfy-scrollbar");
 
-              const track = Blockly.utils.xml.createElement("rect");
+              const track = document.createElementNS(svgNS, "rect");
               track.setAttribute("class", "ntfy-scrollbar-track");
-              track.setAttribute("fill", "#000");
-              track.setAttribute("fill-opacity", "0.15");
+              track.setAttribute("fill", "#000000");
+              track.setAttribute("fill-opacity", "0.12");
               track.setAttribute("x", "0");
               track.setAttribute("y", "0");
               track.setAttribute("width", "6");
@@ -831,10 +849,10 @@ if (typeof Blockly !== "undefined") {
               track.setAttribute("ry", "3");
               sbGroup.appendChild(track);
 
-              const thumb = Blockly.utils.xml.createElement("rect");
+              const thumb = document.createElementNS(svgNS, "rect");
               thumb.setAttribute("class", "ntfy-scrollbar-thumb");
-              thumb.setAttribute("fill", "#000");
-              thumb.setAttribute("fill-opacity", "0.4");
+              thumb.setAttribute("fill", "#000000");
+              thumb.setAttribute("fill-opacity", "0.45");
               thumb.setAttribute("x", "0");
               thumb.setAttribute("y", "0");
               thumb.setAttribute("width", "6");
@@ -842,17 +860,19 @@ if (typeof Blockly !== "undefined") {
               thumb.setAttribute("ry", "3");
               sbGroup.appendChild(thumb);
 
-              svgGroup.appendChild(sbGroup);
+              ownerSvg.appendChild(sbGroup);
             }
 
             const track = sbGroup.querySelector(".ntfy-scrollbar-track");
             const thumb = sbGroup.querySelector(".ntfy-scrollbar-thumb");
 
-            const w = flyout.width_ || 200;
-            // Position relative to flyout internal coordinates (no translation regex needed!)
-            sbGroup.setAttribute("transform", `translate(${w - 14}, 5)`);
+            // Position scrollbar at the right edge of the flyout, slightly inset
+            sbGroup.setAttribute(
+              "transform",
+              `translate(${flyoutX + flyoutW - 10}, ${flyoutY + 4})`,
+            );
 
-            const trackHeight = maxVisibleHeight - 10;
+            const trackHeight = maxVisibleHeight - 8;
             track.setAttribute("height", String(trackHeight));
 
             const thumbHeight = Math.max(
