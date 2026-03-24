@@ -838,10 +838,17 @@ if (typeof Blockly !== "undefined") {
               sbGroup = document.createElementNS(svgNS, "g");
               sbGroup.setAttribute("class", "ntfy-scrollbar");
 
+              const isDark =
+                document.body && document.body.classList.contains("dark");
+              const trackColor = isDark ? "#ffffff" : "#000000";
+              const trackOpacity = isDark ? "0.2" : "0.12";
+              const thumbColor = isDark ? "#ffffff" : "#000000";
+              const thumbOpacity = isDark ? "0.6" : "0.45";
+
               const track = document.createElementNS(svgNS, "rect");
               track.setAttribute("class", "ntfy-scrollbar-track");
-              track.setAttribute("fill", "#000000");
-              track.setAttribute("fill-opacity", "0.12");
+              track.setAttribute("fill", trackColor);
+              track.setAttribute("fill-opacity", trackOpacity);
               track.setAttribute("x", "0");
               track.setAttribute("y", "0");
               track.setAttribute("width", "6");
@@ -851,8 +858,8 @@ if (typeof Blockly !== "undefined") {
 
               const thumb = document.createElementNS(svgNS, "rect");
               thumb.setAttribute("class", "ntfy-scrollbar-thumb");
-              thumb.setAttribute("fill", "#000000");
-              thumb.setAttribute("fill-opacity", "0.45");
+              thumb.setAttribute("fill", thumbColor);
+              thumb.setAttribute("fill-opacity", thumbOpacity);
               thumb.setAttribute("x", "0");
               thumb.setAttribute("y", "0");
               thumb.setAttribute("width", "6");
