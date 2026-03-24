@@ -794,7 +794,8 @@ if (typeof Blockly !== "undefined") {
             if (b && typeof b.getHeightWidth === "function") {
               const pos = b.getRelativeToSurfaceXY();
               const hw = b.getHeightWidth();
-              maxY = Math.max(maxY, pos.y + hw.height);
+              const h = hw && hw.height > 0 ? hw.height : 45;
+              maxY = Math.max(maxY, pos.y + h);
             }
           });
           if (maxY > 0) {
@@ -821,7 +822,10 @@ if (typeof Blockly !== "undefined") {
 
               const track = Blockly.utils.xml.createElement("rect");
               track.setAttribute("class", "ntfy-scrollbar-track");
-              track.setAttribute("fill", "rgba(0, 0, 0, 0.2)");
+              track.setAttribute("fill", "#000");
+              track.setAttribute("fill-opacity", "0.15");
+              track.setAttribute("x", "0");
+              track.setAttribute("y", "0");
               track.setAttribute("width", "6");
               track.setAttribute("rx", "3");
               track.setAttribute("ry", "3");
@@ -829,7 +833,10 @@ if (typeof Blockly !== "undefined") {
 
               const thumb = Blockly.utils.xml.createElement("rect");
               thumb.setAttribute("class", "ntfy-scrollbar-thumb");
-              thumb.setAttribute("fill", "rgba(0, 0, 0, 0.5)");
+              thumb.setAttribute("fill", "#000");
+              thumb.setAttribute("fill-opacity", "0.4");
+              thumb.setAttribute("x", "0");
+              thumb.setAttribute("y", "0");
               thumb.setAttribute("width", "6");
               thumb.setAttribute("rx", "3");
               thumb.setAttribute("ry", "3");
