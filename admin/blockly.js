@@ -965,10 +965,13 @@ if (typeof Blockly !== "undefined") {
         }
       };
       // Flyout Live-Update
+      let lastAvailableBlocksStr = "";
       workspace.addChangeListener((e) => {
         if (
           e.type === Blockly.Events.BLOCK_CREATE ||
-          e.type === Blockly.Events.BLOCK_DELETE
+          e.type === Blockly.Events.BLOCK_DELETE ||
+          e.type === Blockly.Events.BLOCK_MOVE ||
+          e.type === Blockly.Events.BLOCK_CHANGE
         ) {
           const allBlocks = workspace.getAllBlocks(false);
           const usedTypes = allBlocks.map((b) => b.type);
@@ -976,19 +979,28 @@ if (typeof Blockly !== "undefined") {
             .map((opt) => `ntfy_mutator_${opt.key}`)
             .filter((type) => !usedTypes.includes(type));
 
+          const availStr = availableBlocks.join(",");
+
           const flyout = workspace.getFlyout
             ? workspace.getFlyout()
             : workspace.flyout_;
-          if (flyout && typeof flyout.show === "function") {
-            const xmlList = availableBlocks.map((type) => {
-              const block = Blockly.utils.xml.createElement("block");
-              block.setAttribute("type", type);
-              return block;
-            });
-            flyout.show(xmlList);
 
-            // Cap bubble + update scroll after Blockly re-renders
-            setTimeout(capBubbleAndScroll, 100);
+          if (flyout) {
+            if (
+              availStr !== lastAvailableBlocksStr &&
+              typeof flyout.show === "function"
+            ) {
+              lastAvailableBlocksStr = availStr;
+              const xmlList = availableBlocks.map((type) => {
+                const block = Blockly.utils.xml.createElement("block");
+                block.setAttribute("type", type);
+                return block;
+              });
+              flyout.show(xmlList);
+            }
+
+            // Always update scroll/clip dimensions as workspace block positions may have changed
+            setTimeout(capBubbleAndScroll, 50);
           }
         }
       });
