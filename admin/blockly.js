@@ -1160,6 +1160,17 @@ if (typeof Blockly !== "undefined") {
             );
           }
         }
+
+        // Erzwinge die Live-Umsortierung passend zum Mutator-Arbeitsbereich!
+        // Indem wir jeden Block nacheinander an das Ende der Liste schieben,
+        // entsteht automatisch die identische Sortierung wie im Mutator-Fenster.
+        if (typeof this.moveInputBefore === "function") {
+          try {
+            this.moveInputBefore(attrName, null);
+          } catch (e) {
+            // Falls alte Blockly-Versionen null als refName ablehnen
+          }
+        }
       }
     },
   };
