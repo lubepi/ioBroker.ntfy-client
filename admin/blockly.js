@@ -834,37 +834,6 @@ if (typeof Blockly !== "undefined") {
             }
             const flyoutW = flyout.width_ || 200;
 
-            // Determine dark mode robustly by reading the actual computed fill color of the flyout background
-            let isDark = false;
-            if (flyout.svgBackground_) {
-              try {
-                const computedFill = window.getComputedStyle(
-                  flyout.svgBackground_,
-                ).fill;
-                const match = computedFill.match(
-                  /rgb\(\s*(\d+),\s*(\d+),\s*(\d+)\)/,
-                );
-                if (match) {
-                  const r = parseInt(match[1], 10);
-                  const g = parseInt(match[2], 10);
-                  const b = parseInt(match[3], 10);
-                  const brightness = (r * 299 + g * 587 + b * 114) / 1000;
-                  isDark = brightness < 128;
-                }
-              } catch (e) {
-                // Fallback if computation fails
-                isDark =
-                  window.document.body &&
-                  (window.document.body.classList.contains("dark") ||
-                    window.document.body.getAttribute("data-theme") === "dark");
-              }
-            }
-
-            const trackColor = isDark ? "#ffffff" : "#000000";
-            const trackOpacity = isDark ? "0.2" : "0.12";
-            const thumbColor = isDark ? "#ffffff" : "#000000";
-            const thumbOpacity = isDark ? "0.6" : "0.45";
-
             if (!sbGroup) {
               sbGroup = document.createElementNS(svgNS, "g");
               sbGroup.setAttribute("class", "ntfy-scrollbar");
@@ -888,15 +857,72 @@ if (typeof Blockly !== "undefined") {
               sbGroup.appendChild(thumb);
 
               ownerSvg.appendChild(sbGroup);
+
+              // Live Theme Observer: Watch the flyout background for live style/fill changes
+              if (flyout.svgBackground_) {
+                const updateThemeColors = () => {
+                  let isDarkLocal = false;
+                  try {
+                    const cFill = window.getComputedStyle(
+                      flyout.svgBackground_,
+                    ).fill;
+                    const m = cFill.match(/rgb\(\s*(\d+),\s*(\d+),\s*(\d+)\)/);
+                    if (m) {
+                      const brightness =
+                        (parseInt(m[1], 10) * 299 +
+                          parseInt(m[2], 10) * 587 +
+                          parseInt(m[3], 10) * 114) /
+                        1000;
+                      isDarkLocal = brightness < 128;
+                    }
+                  } catch (e) {
+                    isDarkLocal =
+                      window.document.body &&
+                      (window.document.body.classList.contains("dark") ||
+                        window.document.body.getAttribute("data-theme") ===
+                          "dark");
+                  }
+
+                  track.setAttribute(
+                    "fill",
+                    isDarkLocal ? "#ffffff" : "#000000",
+                  );
+                  track.setAttribute(
+                    "fill-opacity",
+                    isDarkLocal ? "0.2" : "0.12",
+                  );
+                  thumb.setAttribute(
+                    "fill",
+                    isDarkLocal ? "#ffffff" : "#000000",
+                  );
+                  thumb.setAttribute(
+                    "fill-opacity",
+                    isDarkLocal ? "0.6" : "0.45",
+                  );
+                };
+
+                // Apply immediately
+                updateThemeColors();
+
+                // Bind to live mutations (e.g. ioBroker dark mode toggle)
+                const obs = new MutationObserver(updateThemeColors);
+                obs.observe(flyout.svgBackground_, {
+                  attributes: true,
+                  attributeFilter: ["fill", "style", "class"],
+                });
+                if (window.document.body) {
+                  obs.observe(window.document.body, {
+                    attributes: true,
+                    attributeFilter: ["class", "data-theme"],
+                  });
+                }
+
+                svgGroup._ntfyThemeObserver = obs;
+              }
             }
 
             const track = sbGroup.querySelector(".ntfy-scrollbar-track");
             const thumb = sbGroup.querySelector(".ntfy-scrollbar-thumb");
-
-            track.setAttribute("fill", trackColor);
-            track.setAttribute("fill-opacity", trackOpacity);
-            thumb.setAttribute("fill", thumbColor);
-            thumb.setAttribute("fill-opacity", thumbOpacity);
 
             // Position scrollbar at the right edge of the flyout, slightly inset
             sbGroup.setAttribute(
