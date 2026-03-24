@@ -644,6 +644,8 @@ if (typeof Blockly !== "undefined") {
         const overrideMetrics = (m) => {
           if (m) {
             m.contentHeight = 0;
+            m.height = 0;
+            m.viewHeight = 0;
           }
           return m;
         };
@@ -655,7 +657,7 @@ if (typeof Blockly !== "undefined") {
           flyout.getMetrics = () => overrideMetrics(orig());
         }
 
-        // Force height_ property to return 0 for mutator bubble calculation
+        // Force height_ property
         let realHeight = flyout.height_ || 0;
         try {
           Object.defineProperty(flyout, "height_", {
@@ -669,28 +671,57 @@ if (typeof Blockly !== "undefined") {
         }
         flyout.getRealContentHeight = () => realHeight;
 
+        // Force flyout's INTERNAL workspace to report 0 height bounds
+        if (flyout.workspace_) {
+          const fws = flyout.workspace_;
+          if (typeof fws.getBlocksBoundingBox === "function") {
+            const origBBox = fws.getBlocksBoundingBox.bind(fws);
+            fws.getBlocksBoundingBox = function () {
+              const b = origBBox();
+              if (b) {
+                b.bottom = b.top;
+                b.height = 0;
+              }
+              return b;
+            };
+          }
+          if (typeof fws.getMetrics === "function") {
+            const origM = fws.getMetrics.bind(fws);
+            fws.getMetrics = () => overrideMetrics(origM());
+          }
+        }
+
         // Force native getBBox() to return 0 height on the flyout SVG group
+        // and workspace canvas.
+        const squashBBox = (element) => {
+          if (element && typeof element.getBBox === "function") {
+            const origBBox = element.getBBox.bind(element);
+            element.getBBox = function () {
+              const b = origBBox();
+              if (b) {
+                return {
+                  x: b.x,
+                  y: b.y,
+                  width: b.width,
+                  height: 0,
+                  top: b.y,
+                  bottom: b.y,
+                  left: b.x,
+                  right: b.x + b.width,
+                };
+              }
+              return b;
+            };
+          }
+        };
+        if (flyout.svgGroup_) {
+          squashBBox(flyout.svgGroup_);
+        }
         if (
-          flyout.svgGroup_ &&
-          typeof flyout.svgGroup_.getBBox === "function"
+          flyout.workspace_ &&
+          typeof flyout.workspace_.getCanvas === "function"
         ) {
-          const origBBox = flyout.svgGroup_.getBBox.bind(flyout.svgGroup_);
-          flyout.svgGroup_.getBBox = function () {
-            const b = origBBox();
-            if (b) {
-              return {
-                x: b.x,
-                y: b.y,
-                width: b.width,
-                height: 0,
-                top: b.y,
-                bottom: b.y,
-                left: b.x,
-                right: b.x + b.width,
-              };
-            }
-            return b;
-          };
+          squashBBox(flyout.workspace_.getCanvas());
         }
       }
 
