@@ -631,99 +631,139 @@ if (typeof Blockly !== "undefined") {
         }
       });
 
-      // Simple helper: cap bubble frame visually via SVG clip-path and enable wheel scrolling.
-      // We don't monkey-patch Blockly's size calculations because doing so breaks
-      // its position layout (e.g. overlapping the gear icon). Instead, Blockly
-      // calculates the full layout correctly, and we simply chop off the bottom
-      // of the drawn bubble cleanly to our max height limit.
+      // Hack the flyout metrics so Blockly evaluates the bubble size SOLELY
+      // on the mutator workspace, completely ignoring the blocks in the flyout.
+      const flyout = workspace.getFlyout
+        ? workspace.getFlyout()
+        : workspace.flyout_;
+
+      if (flyout && !flyout._ntfySquashed) {
+        flyout._ntfySquashed = true;
+
+        // Force getMetrics() to return 0 height for the flyout
+        const overrideMetrics = (m) => {
+          if (m) {
+            m.contentHeight = 0;
+          }
+          return m;
+        };
+        if (typeof flyout.getMetrics_ === "function") {
+          const orig = flyout.getMetrics_.bind(flyout);
+          flyout.getMetrics_ = () => overrideMetrics(orig());
+        } else if (typeof flyout.getMetrics === "function") {
+          const orig = flyout.getMetrics.bind(flyout);
+          flyout.getMetrics = () => overrideMetrics(orig());
+        }
+
+        // Force height_ property to return 0 for mutator bubble calculation
+        let realHeight = flyout.height_ || 0;
+        try {
+          Object.defineProperty(flyout, "height_", {
+            get: () => 0,
+            set: (val) => {
+              realHeight = val;
+            },
+          });
+        } catch (_e) {
+          // ignore
+        }
+        flyout.getRealContentHeight = () => realHeight;
+
+        // Force native getBBox() to return 0 height on the flyout SVG group
+        if (
+          flyout.svgGroup_ &&
+          typeof flyout.svgGroup_.getBBox === "function"
+        ) {
+          const origBBox = flyout.svgGroup_.getBBox.bind(flyout.svgGroup_);
+          flyout.svgGroup_.getBBox = function () {
+            const b = origBBox();
+            if (b) {
+              return {
+                x: b.x,
+                y: b.y,
+                width: b.width,
+                height: 0,
+                top: b.y,
+                bottom: b.y,
+                left: b.x,
+                right: b.x + b.width,
+              };
+            }
+            return b;
+          };
+        }
+      }
+
+      // Helper: Clip only the flyout SVG group visually and enable scrolling.
       const capBubbleAndScroll = () => {
-        const flyout = workspace.getFlyout
-          ? workspace.getFlyout()
-          : workspace.flyout_;
-        const bubble = this.mutator && this.mutator.bubble_;
-        if (!flyout || !flyout.svgGroup_ || !bubble || !bubble.svgGroup_) {
+        if (!flyout || !flyout.svgGroup_) {
           return;
         }
 
-        // 1) Clip the entire Bubble group to visually squash the pink frame
-        const bubbleGroup = bubble.svgGroup_;
-        const ownerSvg = bubbleGroup.ownerSVGElement;
+        // We use the Mutator workspace canvas height to determine the visual height.
+        // Blockly created the bubble based on this height.
+        const wsCanvas = workspace.getCanvas();
+        let wsHeight = 0;
+        if (wsCanvas && typeof wsCanvas.getBBox === "function") {
+          wsHeight = wsCanvas.getBBox().height;
+        }
+        // Minimal acceptable height if workspace is empty
+        const maxVisibleHeight = Math.max(150, wsHeight + 40);
+
+        // 1) Visually clip ONLY the flyout group
+        const svgGroup = flyout.svgGroup_;
+        const ownerSvg = svgGroup.ownerSVGElement;
         if (ownerSvg) {
           let defs = ownerSvg.querySelector("defs");
           if (!defs) {
             defs = Blockly.utils.xml.createElement("defs");
             ownerSvg.insertBefore(defs, ownerSvg.firstChild);
           }
-          const clipId = `ntfy_bubble_clip_${workspace.id || "mut"}`;
+          const clipId = `ntfy_flyout_clip_${workspace.id || "mut"}`;
           let clipPath = defs.querySelector(`#${clipId}`);
           if (!clipPath) {
             clipPath = Blockly.utils.xml.createElement("clipPath");
             clipPath.setAttribute("id", clipId);
             const clipRect = Blockly.utils.xml.createElement("rect");
-            // Cover the left, right, and top arrows, but crop at maxBubbleHeight (bottom limits)
-            clipRect.setAttribute("x", "-2000");
-            clipRect.setAttribute("y", "-2000");
+            // Flyout is positioned via transform, so 0,0 is its top-left
+            clipRect.setAttribute("x", "0");
+            clipRect.setAttribute("y", "0");
+            // Give enough width that block shapes aren't clipped horizontally
             clipRect.setAttribute("width", "5000");
             clipPath.appendChild(clipRect);
             defs.appendChild(clipPath);
-            bubbleGroup.setAttribute("clip-path", `url(#${clipId})`);
+            svgGroup.setAttribute("clip-path", `url(#${clipId})`);
           }
-          // Dynamically adjust crop line
           const clipRect = clipPath.querySelector("rect");
           if (clipRect) {
-            clipRect.setAttribute("height", String(2000 + maxBubbleHeight));
+            clipRect.setAttribute("height", String(maxVisibleHeight));
+          }
+
+          // Also cap the flyout's dark background path to the same height
+          if (flyout.svgBackground_) {
+            const w = flyout.width_ || 200;
+            const r = flyout.CORNER_RADIUS || 8;
+            if (w > r) {
+              const rectPath = `M 0,0 h ${w} a ${r} ${r} 0 0 1 ${r} ${r} v ${maxVisibleHeight - r * 2} a ${r} ${r} 0 0 1 -${r} ${r} h -${w} z`;
+              flyout.svgBackground_.setAttribute("d", rectPath);
+            }
           }
         }
 
-        // 2) Keep the inner SVG capped natively to ensure scroll clipping
-        const innerSvg = flyout.svgGroup_.ownerSVGElement;
-        if (innerSvg) {
-          const cappedH = maxBubbleHeight - 12;
-          innerSvg.style.overflow = "hidden";
-          const h = parseInt(innerSvg.getAttribute("height"), 10) || 0;
-          if (h > cappedH) {
-            innerSvg.setAttribute("height", `${cappedH}px`);
-          }
+        // 2) Attach Wheel Scroll Handler
+        const contentHeight =
+          typeof flyout.getRealContentHeight === "function"
+            ? flyout.getRealContentHeight()
+            : 0;
+        const maxScroll = Math.max(0, contentHeight - maxVisibleHeight);
 
-          // Persistently re-cap on every Blockly resize
-          if (!innerSvg._ntfyObserver) {
-            let capping = false;
-            const obs = new MutationObserver(() => {
-              if (capping) {
-                return;
-              }
-              const curH = parseInt(innerSvg.getAttribute("height"), 10) || 0;
-              if (curH > cappedH) {
-                capping = true;
-                innerSvg.setAttribute("height", `${cappedH}px`);
-                capping = false;
-              }
-            });
-            obs.observe(innerSvg, {
-              attributes: true,
-              attributeFilter: ["height"],
-            });
-            innerSvg._ntfyObserver = obs;
-          }
-        }
-
-        const svgGroup = flyout.svgGroup_;
-        const contentHeight = flyout.height_ || 0;
-        const visibleHeight = maxBubbleHeight - 12;
-        const maxScroll = Math.max(0, contentHeight - visibleHeight);
-
-        // Store scroll limits and reset position
         svgGroup._ntfyMaxScroll = maxScroll;
         svgGroup._ntfyScrollY = 0;
-        const flyoutWs = svgGroup.querySelector(".blocklyWorkspace");
-        const blockCanvas = flyoutWs
-          ? flyoutWs.querySelector(".blocklyBlockCanvas")
-          : null;
+        const blockCanvas = svgGroup.querySelector(".blocklyBlockCanvas");
         if (blockCanvas) {
           blockCanvas.setAttribute("transform", "translate(0, 0) scale(1)");
         }
 
-        // Attach wheel handler only once
         if (!svgGroup._ntfyWheelAttached) {
           svgGroup._ntfyWheelAttached = true;
           svgGroup.addEventListener(
@@ -740,8 +780,7 @@ if (typeof Blockly !== "undefined") {
               scrollY = Math.max(0, Math.min(max, scrollY + e.deltaY * 0.5));
               svgGroup._ntfyScrollY = scrollY;
 
-              const ws = svgGroup.querySelector(".blocklyWorkspace");
-              const bc = ws ? ws.querySelector(".blocklyBlockCanvas") : null;
+              const bc = svgGroup.querySelector(".blocklyBlockCanvas");
               if (bc) {
                 bc.setAttribute(
                   "transform",
@@ -753,7 +792,6 @@ if (typeof Blockly !== "undefined") {
           );
         }
       };
-
       // Flyout Live-Update
       workspace.addChangeListener((e) => {
         if (
