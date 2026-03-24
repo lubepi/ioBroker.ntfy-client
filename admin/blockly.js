@@ -838,8 +838,33 @@ if (typeof Blockly !== "undefined") {
               sbGroup = document.createElementNS(svgNS, "g");
               sbGroup.setAttribute("class", "ntfy-scrollbar");
 
-              const isDark =
-                document.body && document.body.classList.contains("dark");
+              // Determine dark mode robustly by reading the actual computed fill color of the flyout background
+              let isDark = false;
+              if (flyout.svgBackground_) {
+                try {
+                  const computedFill = window.getComputedStyle(
+                    flyout.svgBackground_,
+                  ).fill;
+                  const match = computedFill.match(
+                    /rgb\(\s*(\d+),\s*(\d+),\s*(\d+)\)/,
+                  );
+                  if (match) {
+                    const r = parseInt(match[1], 10);
+                    const g = parseInt(match[2], 10);
+                    const b = parseInt(match[3], 10);
+                    const brightness = (r * 299 + g * 587 + b * 114) / 1000;
+                    isDark = brightness < 128;
+                  }
+                } catch (e) {
+                  // Fallback if computation fails
+                  isDark =
+                    window.document.body &&
+                    (window.document.body.classList.contains("dark") ||
+                      window.document.body.getAttribute("data-theme") ===
+                        "dark");
+                }
+              }
+
               const trackColor = isDark ? "#ffffff" : "#000000";
               const trackOpacity = isDark ? "0.2" : "0.12";
               const thumbColor = isDark ? "#ffffff" : "#000000";
