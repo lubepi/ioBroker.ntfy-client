@@ -808,6 +808,58 @@ if (typeof Blockly !== "undefined") {
           blockCanvas.setAttribute("transform", "translate(0, 0) scale(1)");
         }
 
+        // 3) Manage visual scrollbar
+        let sbGroup = svgGroup.querySelector(".ntfy-scrollbar");
+        if (maxScroll > 0) {
+          if (!sbGroup) {
+            sbGroup = Blockly.utils.xml.createElement("g");
+            sbGroup.setAttribute("class", "ntfy-scrollbar");
+
+            const track = Blockly.utils.xml.createElement("rect");
+            track.setAttribute("class", "ntfy-scrollbar-track");
+            track.setAttribute("fill", "rgba(0, 0, 0, 0.1)");
+            track.setAttribute("width", "6");
+            track.setAttribute("rx", "3");
+            track.setAttribute("ry", "3");
+            sbGroup.appendChild(track);
+
+            const thumb = Blockly.utils.xml.createElement("rect");
+            thumb.setAttribute("class", "ntfy-scrollbar-thumb");
+            thumb.setAttribute("fill", "rgba(0, 0, 0, 0.4)");
+            thumb.setAttribute("width", "6");
+            thumb.setAttribute("rx", "3");
+            thumb.setAttribute("ry", "3");
+            sbGroup.appendChild(thumb);
+
+            svgGroup.appendChild(sbGroup);
+          }
+
+          const track = sbGroup.querySelector(".ntfy-scrollbar-track");
+          const thumb = sbGroup.querySelector(".ntfy-scrollbar-thumb");
+
+          const w = flyout.width_ || 200;
+          sbGroup.setAttribute("transform", `translate(${w - 12}, 5)`);
+
+          const trackHeight = maxVisibleHeight - 10;
+          track.setAttribute("height", String(trackHeight));
+
+          const thumbHeight = Math.max(
+            20,
+            (maxVisibleHeight / contentHeight) * trackHeight,
+          );
+          thumb.setAttribute("height", String(thumbHeight));
+          thumb.setAttribute("y", "0");
+
+          svgGroup._ntfyThumb = thumb;
+          svgGroup._ntfyTrackHeight = trackHeight;
+          svgGroup._ntfyThumbHeight = thumbHeight;
+        } else {
+          if (sbGroup) {
+            sbGroup.remove();
+          }
+          svgGroup._ntfyThumb = null;
+        }
+
         if (!svgGroup._ntfyWheelAttached) {
           svgGroup._ntfyWheelAttached = true;
           svgGroup.addEventListener(
@@ -830,6 +882,13 @@ if (typeof Blockly !== "undefined") {
                   "transform",
                   `translate(0, ${-scrollY}) scale(1)`,
                 );
+              }
+
+              if (svgGroup._ntfyThumb) {
+                const thumbY =
+                  (scrollY / max) *
+                  (svgGroup._ntfyTrackHeight - svgGroup._ntfyThumbHeight);
+                svgGroup._ntfyThumb.setAttribute("y", String(thumbY));
               }
             },
             { passive: false },
