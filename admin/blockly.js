@@ -523,24 +523,24 @@ if (typeof Blockly !== "undefined") {
     '  <mutation xmlns="http://www.w3.org/1999/xhtml" items="message,topic,title,priority"></mutation>' +
     '  <value name="message">' +
     '    <shadow type="text">' +
-    '      <field name="TEXT">Hello from ioBroker</field>' +
+    '      <field name="TEXT"></field>' +
     "    </shadow>" +
     "  </value>" +
     '  <value name="topic">' +
     '    <shadow type="text">' +
-    '      <field name="TEXT">my-topic</field>' +
+    '      <field name="TEXT"></field>' +
     "    </shadow>" +
     "  </value>" +
     "</block>" +
     '<block type="ntfy_manage">' +
     '     <value name="TOPIC">' +
     '         <shadow type="text">' +
-    '             <field name="TEXT">my-topic</field>' +
+    '             <field name="TEXT"></field>' +
     "         </shadow>" +
     "     </value>" +
     '     <value name="SEQUENCE_ID">' +
     '         <shadow type="text">' +
-    '             <field name="TEXT">my-sequence-id</field>' +
+    '             <field name="TEXT"></field>' +
     "         </shadow>" +
     "     </value>" +
     "</block>";
