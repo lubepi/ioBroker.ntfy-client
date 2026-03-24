@@ -822,7 +822,27 @@ class Ntfy extends utils.Adapter {
         }
       }
     } catch (error) {
-      this.log.warn(`Server health check failed: ${error.message}`);
+      if (error.response) {
+        if (error.response.status === 404) {
+          this.log.warn(
+            `Server health check failed (404): No ntfy instance found at this URL. Please verify your Server URL.`,
+          );
+        } else if (error.response.status === 401) {
+          this.log.warn(
+            `Server health check failed (401): Authentication rejected. Please check your Username/Password or Access Token.`,
+          );
+        } else if (error.response.status === 403) {
+          this.log.warn(
+            `Server health check failed (403): Access forbidden. Ensure you have the right permissions.`,
+          );
+        } else {
+          this.log.warn(
+            `Server health check failed (${error.response.status}): ${error.message}`,
+          );
+        }
+      } else {
+        this.log.warn(`Server health check failed: ${error.message}`);
+      }
       await this.setStateAsync("info.connection", false, true);
     }
   }
