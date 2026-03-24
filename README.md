@@ -1,5 +1,5 @@
-![Logo](admin/ntfy-sh.png)
-# ioBroker.ntfy-sh
+![Logo](admin/ntfy-client.png)
+# ioBroker.ntfy-client
 
 ## Unofficial ntfy.sh adapter for ioBroker
 
@@ -45,7 +45,7 @@ Send and receive notifications via [ntfy.sh](https://ntfy.sh) directly from ioBr
 
 ### Topic Subscription (Receive Messages)
 
-Configure topics in the adapter settings under the **Topics** tab. The adapter subscribes to these topics via SSE and creates states for each topic under `ntfy-sh.0.topics.<topicName>`:
+Configure topics in the adapter settings under the **Topics** tab. The adapter subscribes to these topics via SSE and creates states for each topic under `ntfy-client.0.topics.<topicName>`:
 
 | State | Description |
 |-------|-------------|
@@ -62,7 +62,7 @@ Configure topics in the adapter settings under the **Topics** tab. The adapter s
 
 ### Account Statistics
 
-When authentication is configured, the adapter fetches account statistics every 15 minutes and stores them under `ntfy-sh.0.stats`:
+When authentication is configured, the adapter fetches account statistics every 15 minutes and stores them under `ntfy-client.0.stats`:
 
 * **Messages**: published, remaining, limit, expiry duration
 * **Emails**: sent, remaining, limit
@@ -104,7 +104,7 @@ Clear or delete an existing notification:
 
 #### Send a notification
 ```javascript
-sendTo('ntfy-sh.0', 'send', {
+sendTo('ntfy-client.0', 'send', {
     message: 'Motion detected in the backyard!',
     title: 'Security Alert',
     topic: 'home_alerts_xyz',
@@ -117,7 +117,7 @@ sendTo('ntfy-sh.0', 'send', {
 
 #### Send with email forwarding and icon
 ```javascript
-sendTo('ntfy-sh.0', 'send', {
+sendTo('ntfy-client.0', 'send', {
     message: 'Temperature above threshold!',
     topic: 'home_alerts_xyz',
     email: 'admin@example.com',
@@ -128,7 +128,7 @@ sendTo('ntfy-sh.0', 'send', {
 
 #### Send with file attachment
 ```javascript
-sendTo('ntfy-sh.0', 'send', {
+sendTo('ntfy-client.0', 'send', {
     message: 'Security camera snapshot',
     topic: 'home_alerts_xyz',
     attach_file: '/tmp/snapshot.jpg',
@@ -138,7 +138,7 @@ sendTo('ntfy-sh.0', 'send', {
 
 #### Send with action buttons
 ```javascript
-sendTo('ntfy-sh.0', 'send', {
+sendTo('ntfy-client.0', 'send', {
     message: 'Doorbell rang!',
     topic: 'home_alerts_xyz',
     actions: [
@@ -150,7 +150,7 @@ sendTo('ntfy-sh.0', 'send', {
 
 #### Dismiss a notification
 ```javascript
-sendTo('ntfy-sh.0', 'dismiss', {
+sendTo('ntfy-client.0', 'dismiss', {
     topic: 'home_alerts_xyz',
     sequence_id: 'abc123'
 });
@@ -158,7 +158,7 @@ sendTo('ntfy-sh.0', 'dismiss', {
 
 #### Delete a notification
 ```javascript
-sendTo('ntfy-sh.0', 'delete', {
+sendTo('ntfy-client.0', 'delete', {
     topic: 'home_alerts_xyz',
     sequence_id: 'abc123'
 });
@@ -202,7 +202,27 @@ Ntfy supports a few variations:
 * (lubepi) initial release with full ntfy.sh support
 
 ## License
-MIT License - Copyright (c) 2026 lubepi <https://github.com/lubepi>
+MIT License
+
+Copyright (c) 2026 lubepi
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
 
 ## Legal Notice
 This adapter is **NOT** an official product of ntfy LLC. The name **ntfy**, the logo and branding are trademarks of ntfy LLC. This adapter is a community project to provide integration into ioBroker.

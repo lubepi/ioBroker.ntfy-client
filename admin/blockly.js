@@ -6,17 +6,17 @@ if (typeof Blockly !== "undefined") {
 
   // Define custom translations for the blockly block
   Blockly.Words["ntfy"] = {
-    en: "ntfy-sh notification",
-    de: "ntfy-sh Benachrichtigung",
-    ru: "ntfy-sh уведомление",
-    pt: "ntfy-sh notificação",
-    nl: "ntfy-sh melding",
-    fr: "ntfy-sh notification",
-    it: "ntfy-sh notifica",
-    es: "ntfy-sh notificación",
-    pl: "ntfy-sh powiadomienie",
-    uk: "ntfy-sh сповіщення",
-    "zh-cn": "ntfy-sh 通知",
+    en: "ntfy-client notification",
+    de: "ntfy-client Benachrichtigung",
+    ru: "ntfy-client уведомление",
+    pt: "ntfy-client notificação",
+    nl: "ntfy-client melding",
+    fr: "ntfy-client notification",
+    it: "ntfy-client notifica",
+    es: "ntfy-client notificación",
+    pl: "ntfy-client powiadomienie",
+    uk: "ntfy-client сповіщення",
+    "zh-cn": "ntfy-client 通知",
   };
   Blockly.Words["ntfy_anyInstance"] = {
     en: "all instances",
@@ -305,17 +305,17 @@ if (typeof Blockly !== "undefined") {
     "zh-cn": "序列ID",
   };
   Blockly.Words["ntfy_manage"] = {
-    en: "ntfy-sh management",
-    de: "ntfy-sh Verwaltung",
-    ru: "ntfy-sh управление",
-    pt: "gestão ntfy-sh",
-    nl: "ntfy-sh beheer",
-    fr: "gestion ntfy-sh",
-    it: "gestione ntfy-sh",
-    es: "gestión de ntfy-sh",
-    pl: "zarządzanie ntfy-sh",
-    uk: "управління ntfy-sh",
-    "zh-cn": "ntfy-sh 管理",
+    en: "ntfy-client management",
+    de: "ntfy-client Verwaltung",
+    ru: "ntfy-client управление",
+    pt: "gestão ntfy-client",
+    nl: "ntfy-client beheer",
+    fr: "gestion ntfy-client",
+    it: "gestione ntfy-client",
+    es: "gestión de ntfy-client",
+    pl: "zarządzanie ntfy-client",
+    uk: "управління ntfy-client",
+    "zh-cn": "ntfy-client 管理",
   };
   Blockly.Words["ntfy_action"] = {
     en: "action",
@@ -438,33 +438,33 @@ if (typeof Blockly !== "undefined") {
   };
 
   Blockly.Words["ntfy_tooltip"] = {
-    en: "Sends ntfy-sh notification.\ntopic: Channel.\nmessage: Text.\ntitle: Header.\npriority: 1-5.\ntags: Emojis.\nclick URL: On-click link.\nicon URL: Custom icon.\nactions (JSON): Buttons.\nattach URL: File link.\nattach file (local path): Upload file.\nfilename: Name for attachment.\nsequence ID: Message update ID.\ndelay: Delivery delay.\nemail (forward to): Forwarding address.\ncall (phone number): Phone call.\nDisable Cache Control: No server cache.\nDisable Firebase: No Firebase.\nUnifiedPush: UnifiedPush support.\nUse Template: Manual (yes) or preset (github, grafana, alertmanager).\nmarkdown: Markdown syntax.",
-    de: "Sendet ntfy-sh Nachricht.\nTopic: Kanalname.\nNachricht: Textinhalt.\nTitel: Überschrift.\nPriorität: 1-5.\nTags: Emojis.\nKlick-URL: Link bei Klick.\nIcon-URL: Eigenes Icon.\nAktionen (JSON): Buttons.\nAnhang-URL: Datei-Link.\nDatei anhängen (lokaler Pfad): Datei-Upload.\nDateiname: Name des Anhangs.\nSequenz-ID: Nachrichten-Update ID.\nVerzögerung: Liefer-Verzug.\nE-Mail (weiterleiten an): E-Mail-Adresse.\nAnruf (Telefonnummer): Telefonanruf.\nCache-Kontrolle deaktivieren: Kein Server-Cache.\nFirebase deaktivieren: Kein Firebase.\nUnifiedPush: UnifiedPush.\nTemplate verwenden: Template-Syntax.\nMarkdown: Markdown-Syntax.",
-    ru: "Отправляет ntfy-sh уведомление.\ntopic: Канал.\nmessage: Текст.\ntitle: Заголовок.\npriority: Важность (1-5).\ntags: Эмодзи.\nclick URL: Ссылка.\nicon URL: Иконка.\nactions (JSON): Кнопки.\nattach URL: Файл.\nattach file (local path): Загрузка файла.\nfilename: Имя файла.\nsequence ID: ID обновления.\ndelay: Задержка.\nemail (forward to): Электронная почта.\ncall (phone number): Телефон.\nDisable Cache Control: Откл. кеш.\nDisable Firebase: Откл. Firebase.\nUnifiedPush: UnifiedPush.\nUse Template: Шаблон.\nmarkdown: Markdown.",
-    pt: "Envia notificação ntfy-sh.\ntopic: Canal.\nmessage: Mensagem.\ntitle: Título.\npriority: 1-5.\ntags: Emojis.\nclick URL: Link.\nicon URL: Ícone.\nactions (JSON): Botões.\nattach URL: Link do arquivo.\nattach file (local path): Enviar arquivo.\nfilename: Nome do arquivo.\nsequence ID: ID atualização.\ndelay: Atraso.\nemail (forward to): Encaminhar p/ email.\ncall (phone number): Chamada telefônica.\nDisable Cache Control: Sem cache.\nDisable Firebase: Sem Firebase.\nUnifiedPush: UnifiedPush.\nUse Template: Modelo.\nmarkdown: Markdown.",
-    nl: "Verstuurt ntfy-sh melding.\ntopic: Kanaal.\nmessage: Bericht.\ntitle: Kop.\nprioriteit: 1-5.\ntags: Emojis.\nclick URL: Link.\nicon URL: Icoon.\nactions (JSON): Acties.\nattach URL: Bestandlink.\nattach file (local path): Upload bestand.\nfilename: Bestandsnaam.\nsequence ID: Update ID.\ndelay: Vertraging.\nemail (forward to): E-mail doorsturen.\ncall (phone number): Bellen.\nDisable Cache Control: Geen cache.\nDisable Firebase: Geen Firebase.\nUnifiedPush: UnifiedPush.\nUse Template: Sjabloon.\nmarkdown: Markdown.",
-    fr: "Envoie une notification ntfy-sh.\ntopic: Canal.\nmessage: Texte.\ntitre: En-tête.\npriorité: 1-5.\ntags: Emojis.\nclick URL: Lien.\nicon URL: Icône.\nactions (JSON): Boutons.\nattach URL: Lien fichier.\nattach file (local path): Upload fichier.\nfilename: Nom du fichier.\nsequence ID: ID mise à jour.\ndelay: Délai.\nemail (forward to): Faire suivre email.\ncall (phone number): Appel.\nDisable Cache Control: Pas de cache.\nDisable Firebase: Pas de Firebase.\nUnifiedPush: UnifiedPush.\nUse Template: Modèle.\nmarkdown: Markdown.",
-    it: "Invia notifica ntfy-sh.\ntopic: Canale.\nmessage: Messaggio.\ntitle: Intestazione.\npriorità: 1-5.\ntags: Emoji.\nclick URL: Link.\nicon URL: Icona.\nactions (JSON): Pulsanti.\nattach URL: Link file.\nattach file (local path): Carica file.\nfilename: Nome file.\nsequence ID: ID aggiornamento.\ndelay: Ritardo.\nemail (forward to): Inoltra email.\ncall (phone number): Chiamata.\nDisable Cache Control: No cache.\nDisable Firebase: No Firebase.\nUnifiedPush: UnifiedPush.\nUse Template: Modello.\nmarkdown: Markdown.",
-    es: "Envía notificación ntfy-sh.\ntopic: Canal.\nmensaje: Mensaje.\ntítulo: Encabezado.\nprioridad: 1-5.\ntags: Emojis.\nclick URL: Enlace.\nicon URL: Icono.\nacciones (JSON): Botones.\nattach URL: Link archivo.\nattach file (local path): Subir archivo.\nfilename: Nombre archivo.\nsequence ID: ID actualización.\ndelay: Retraso.\nemail (forward to): Reenviar email.\ncall (phone number): Llamada.\nDisable Cache Control: Sin caché.\nDisable Firebase: Sin Firebase.\nUnifiedPush: UnifiedPush.\nUse Template: Plantilla.\nmarkdown: Markdown.",
-    pl: "Wysyła powiadomienie ntfy-sh.\ntopik: Kanał.\nmessage: Treść.\ntitle: Nagłówek.\npriority: 1-5.\ntags: Emoji.\nclick URL: Link.\nicon URL: Ikona.\nactions (JSON): Przyciski.\nattach URL: Link pliku.\nattach file (local path): Prześlij plik.\nfilename: Nazwa pliku.\nsequence ID: ID aktualizacji.\ndelay: Opóźnienie.\nemail (forward to): Przekaż e-mail.\ncall (phone number): Połączenie.\nDisable Cache Control: Brak bufora.\nDisable Firebase: Brak Firebase.\nUnifiedPush: UnifiedPush.\nUse Template: Szablon.\nmarkdown: Markdown.",
-    uk: "Надсилає ntfy-sh повідомлення.\ntopic: Канал.\nmessage: Текст.\ntitle: Заголовок.\npriority: 1-5.\ntags: Емодзі.\nclick URL: Посилання.\nicon URL: Іконка.\nactions (JSON): Кнопки.\nattach URL: Файл.\nattach file (local path): Шлях файлу.\nfilename: Ім'я файлу.\nsequence ID: ID оновлення.\ndelay: Затримка.\nemail (forward to): Переслати пошту.\ncall (phone number): Телефон.\nDisable Cache Control: Без кеша.\nDisable Firebase: Без Firebase.\nUnifiedPush: UnifiedPush.\nUse Template: Шаблон.\nmarkdown: Markdown.",
+    en: "Sends ntfy-client notification.\ntopic: Channel.\nmessage: Text.\ntitle: Header.\npriority: 1-5.\ntags: Emojis.\nclick URL: On-click link.\nicon URL: Custom icon.\nactions (JSON): Buttons.\nattach URL: File link.\nattach file (local path): Upload file.\nfilename: Name for attachment.\nsequence ID: Message update ID.\ndelay: Delivery delay.\nemail (forward to): Forwarding address.\ncall (phone number): Phone call.\nDisable Cache Control: No server cache.\nDisable Firebase: No Firebase.\nUnifiedPush: UnifiedPush support.\nUse Template: Manual (yes) or preset (github, grafana, alertmanager).\nmarkdown: Markdown syntax.",
+    de: "Sendet ntfy-client Nachricht.\nTopic: Kanalname.\nNachricht: Textinhalt.\nTitel: Überschrift.\nPriorität: 1-5.\nTags: Emojis.\nKlick-URL: Link bei Klick.\nIcon-URL: Eigenes Icon.\nAktionen (JSON): Buttons.\nAnhang-URL: Datei-Link.\nDatei anhängen (lokaler Pfad): Datei-Upload.\nDateiname: Name des Anhangs.\nSequenz-ID: Nachrichten-Update ID.\nVerzögerung: Liefer-Verzug.\nE-Mail (weiterleiten an): E-Mail-Adresse.\nAnruf (Telefonnummer): Telefonanruf.\nCache-Kontrolle deaktivieren: Kein Server-Cache.\nFirebase deaktivieren: Kein Firebase.\nUnifiedPush: UnifiedPush.\nTemplate verwenden: Template-Syntax.\nMarkdown: Markdown-Syntax.",
+    ru: "Отправляет ntfy-client уведомление.\ntopic: Канал.\nmessage: Текст.\ntitle: Заголовок.\npriority: Важность (1-5).\ntags: Эмодзи.\nclick URL: Ссылка.\nicon URL: Иконка.\nactions (JSON): Кнопки.\nattach URL: Файл.\nattach file (local path): Загрузка файла.\nfilename: Имя файла.\nsequence ID: ID обновления.\ndelay: Задержка.\nemail (forward to): Электронная почта.\ncall (phone number): Телефон.\nDisable Cache Control: Откл. кеш.\nDisable Firebase: Откл. Firebase.\nUnifiedPush: UnifiedPush.\nUse Template: Шаблон.\nmarkdown: Markdown.",
+    pt: "Envia notificação ntfy-client.\ntopic: Canal.\nmessage: Mensagem.\ntitle: Título.\npriority: 1-5.\ntags: Emojis.\nclick URL: Link.\nicon URL: Ícone.\nactions (JSON): Botões.\nattach URL: Link do arquivo.\nattach file (local path): Enviar arquivo.\nfilename: Nome do arquivo.\nsequence ID: ID atualização.\ndelay: Atraso.\nemail (forward to): Encaminhar p/ email.\ncall (phone number): Chamada telefônica.\nDisable Cache Control: Sem cache.\nDisable Firebase: Sem Firebase.\nUnifiedPush: UnifiedPush.\nUse Template: Modelo.\nmarkdown: Markdown.",
+    nl: "Verstuurt ntfy-client melding.\ntopic: Kanaal.\nmessage: Bericht.\ntitle: Kop.\nprioriteit: 1-5.\ntags: Emojis.\nclick URL: Link.\nicon URL: Icoon.\nactions (JSON): Acties.\nattach URL: Bestandlink.\nattach file (local path): Upload bestand.\nfilename: Bestandsnaam.\nsequence ID: Update ID.\ndelay: Vertraging.\nemail (forward to): E-mail doorsturen.\ncall (phone number): Bellen.\nDisable Cache Control: Geen cache.\nDisable Firebase: Geen Firebase.\nUnifiedPush: UnifiedPush.\nUse Template: Sjabloon.\nmarkdown: Markdown.",
+    fr: "Envoie une notification ntfy-client.\ntopic: Canal.\nmessage: Texte.\ntitre: En-tête.\npriorité: 1-5.\ntags: Emojis.\nclick URL: Lien.\nicon URL: Icône.\nactions (JSON): Boutons.\nattach URL: Lien fichier.\nattach file (local path): Upload fichier.\nfilename: Nom du fichier.\nsequence ID: ID mise à jour.\ndelay: Délai.\nemail (forward to): Faire suivre email.\ncall (phone number): Appel.\nDisable Cache Control: Pas de cache.\nDisable Firebase: Pas de Firebase.\nUnifiedPush: UnifiedPush.\nUse Template: Modèle.\nmarkdown: Markdown.",
+    it: "Invia notifica ntfy-client.\ntopic: Canale.\nmessage: Messaggio.\ntitle: Intestazione.\npriorità: 1-5.\ntags: Emoji.\nclick URL: Link.\nicon URL: Icona.\nactions (JSON): Pulsanti.\nattach URL: Link file.\nattach file (local path): Carica file.\nfilename: Nome file.\nsequence ID: ID aggiornamento.\ndelay: Ritardo.\nemail (forward to): Inoltra email.\ncall (phone number): Chiamata.\nDisable Cache Control: No cache.\nDisable Firebase: No Firebase.\nUnifiedPush: UnifiedPush.\nUse Template: Modello.\nmarkdown: Markdown.",
+    es: "Envía notificación ntfy-client.\ntopic: Canal.\nmensaje: Mensaje.\ntítulo: Encabezado.\nprioridad: 1-5.\ntags: Emojis.\nclick URL: Enlace.\nicon URL: Icono.\nacciones (JSON): Botones.\nattach URL: Link archivo.\nattach file (local path): Subir archivo.\nfilename: Nombre archivo.\nsequence ID: ID actualización.\ndelay: Retraso.\nemail (forward to): Reenviar email.\ncall (phone number): Llamada.\nDisable Cache Control: Sin caché.\nDisable Firebase: Sin Firebase.\nUnifiedPush: UnifiedPush.\nUse Template: Plantilla.\nmarkdown: Markdown.",
+    pl: "Wysyła powiadomienie ntfy-client.\ntopik: Kanał.\nmessage: Treść.\ntitle: Nagłówek.\npriority: 1-5.\ntags: Emoji.\nclick URL: Link.\nicon URL: Ikona.\nactions (JSON): Przyciski.\nattach URL: Link pliku.\nattach file (local path): Prześlij plik.\nfilename: Nazwa pliku.\nsequence ID: ID aktualizacji.\ndelay: Opóźnienie.\nemail (forward to): Przekaż e-mail.\ncall (phone number): Połączenie.\nDisable Cache Control: Brak bufora.\nDisable Firebase: Brak Firebase.\nUnifiedPush: UnifiedPush.\nUse Template: Szablon.\nmarkdown: Markdown.",
+    uk: "Надсилає ntfy-client повідомлення.\ntopic: Канал.\nmessage: Текст.\ntitle: Заголовок.\npriority: 1-5.\ntags: Емодзі.\nclick URL: Посилання.\nicon URL: Іконка.\nactions (JSON): Кнопки.\nattach URL: Файл.\nattach file (local path): Шлях файлу.\nfilename: Ім'я файлу.\nsequence ID: ID оновлення.\ndelay: Затримка.\nemail (forward to): Переслати пошту.\ncall (phone number): Телефон.\nDisable Cache Control: Без кеша.\nDisable Firebase: Без Firebase.\nUnifiedPush: UnifiedPush.\nUse Template: Шаблон.\nmarkdown: Markdown.",
     "zh-cn":
-      "发送 ntfy-sh 通知。\ntopic：频道。\nmessage：文本。\ntitle：标题。\npriority：1-5。\ntags：表情符号。\nclick URL：点击链接。\nicon URL：定制图标。\nactions (JSON)：按钮。\nattach URL：附件链接。\nattach file (local path)：本地文件。\nfilename：文件名。\nsequence ID：更新ID。\ndelay：延迟。\nemail (forward to)：转发邮件。\ncall (phone number)：拨打电话。\nDisable Cache Control：禁用缓存。\nDisable Firebase：禁用 Firebase。\nUnifiedPush：UnifiedPush。\nUse Template：模板。\nmarkdown：Markdown。",
+      "发送 ntfy-client 通知。\ntopic：频道。\nmessage：文本。\ntitle：标题。\npriority：1-5。\ntags：表情符号。\nclick URL：点击链接。\nicon URL：定制图标。\nactions (JSON)：按钮。\nattach URL：附件链接。\nattach file (local path)：本地文件。\nfilename：文件名。\nsequence ID：更新ID。\ndelay：延迟。\nemail (forward to)：转发邮件。\ncall (phone number)：拨打电话。\nDisable Cache Control：禁用缓存。\nDisable Firebase：禁用 Firebase。\nUnifiedPush：UnifiedPush。\nUse Template：模板。\nmarkdown：Markdown。",
   };
 
   Blockly.Words["ntfy_manage_tooltip"] = {
-    en: "Manage ntfy-sh messages.\naction: clear/dismiss (app) or delete (server).\ntopic: Channel name.\nsequence ID: Unique ID of the message.",
-    de: "ntfy-sh Nachrichten verwalten.\nAktion: Quittieren (App) oder Löschen (Server).\nTopic: Kanalname.\nSequenz-ID: Eindeutige ID der Nachricht.",
-    ru: "Управление ntfy-sh.\nдействие: очистить (приложение) или удалить (сервер).\ntopic: Канал.\nsequence ID: ID сообщения.",
-    pt: "Gerir mensagens ntfy-sh.\nação: limpar (app) ou eliminar (servidor).\ntopic: Canal.\nsequence ID: ID mensagem.",
-    nl: "Beheer ntfy-sh berichten.\nactie: wissen (app) of verwijderen (server).\ntopic: Kanaal.\nsequence ID: Bericht-ID.",
-    fr: "Gérer les messages ntfy-sh.\naction: effacer (app) ou supprimer (serveur).\ntopic: Canal.\nsequence ID: ID du message.",
-    it: "Gestisci messaggi ntfy-sh.\nazione: cancella (app) o elimina (server).\ntopic: Canale.\nsequence ID: ID messaggio.",
-    es: "Gestionar mensajes ntfy-sh.\nacción: borrar (app) o eliminar (servidor).\ntopic: Canal.\nsequence ID: ID mensaje.",
-    pl: "Zarządzaj wiadomościami ntfy-sh.\nakcja: wyczyść (aplikacja) lub usuń (serwer).\ntopik: Kanał.\nsequence ID: ID wiadomości.",
-    uk: "Керування ntfy-sh.\nдія: очистити (додаток) або видалити (сервер).\ntopic: Канал.\nsequence ID: ID повідомлення.",
+    en: "Manage ntfy-client messages.\naction: clear/dismiss (app) or delete (server).\ntopic: Channel name.\nsequence ID: Unique ID of the message.",
+    de: "ntfy-client Nachrichten verwalten.\nAktion: Quittieren (App) oder Löschen (Server).\nTopic: Kanalname.\nSequenz-ID: Eindeutige ID der Nachricht.",
+    ru: "Управление ntfy-client.\nдействие: очистить (приложение) или удалить (сервер).\ntopic: Канал.\nsequence ID: ID сообщения.",
+    pt: "Gerir mensagens ntfy-client.\nação: limpar (app) ou eliminar (servidor).\ntopic: Canal.\nsequence ID: ID mensagem.",
+    nl: "Beheer ntfy-client berichten.\nactie: wissen (app) of verwijderen (server).\ntopic: Kanaal.\nsequence ID: Bericht-ID.",
+    fr: "Gérer les messages ntfy-client.\naction: effacer (app) ou supprimer (serveur).\ntopic: Canal.\nsequence ID: ID du message.",
+    it: "Gestisci messaggi ntfy-client.\nazione: cancella (app) o elimina (server).\ntopic: Canale.\nsequence ID: ID messaggio.",
+    es: "Gestionar mensajes ntfy-client.\nacción: borrar (app) o eliminar (servidor).\ntopic: Canal.\nsequence ID: ID mensaje.",
+    pl: "Zarządzaj wiadomościami ntfy-client.\nakcja: wyczyść (aplikacja) lub usuń (serwer).\ntopik: Kanał.\nsequence ID: ID wiadomości.",
+    uk: "Керування ntfy-client.\nдія: очистити (додаток) або видалити (сервер).\ntopic: Канал.\nsequence ID: ID повідомлення.",
     "zh-cn":
-      "管理 ntfy-sh 消息。\n操作：清除（应用） oder 删除（服务器）。\ntopic：频道名称。\nsequence ID：消息ID。",
+      "管理 ntfy-client 消息。\n操作：清除（应用） oder 删除（服务器）。\ntopic：频道名称。\nsequence ID：消息ID。",
   };
 
   Blockly.Blocks["ntfy_mutator_container"] = {
@@ -557,7 +557,7 @@ if (typeof Blockly !== "undefined") {
                 [Blockly.Words["ntfy_anyInstance"][systemLang], ""],
               ];
               for (var i = 0; i < instances.length; i++) {
-                if (instances[i].startsWith("system.adapter.ntfy-sh.")) {
+                if (instances[i].startsWith("system.adapter.ntfy-client.")) {
                   var shortId = instances[i].replace("system.adapter.", "");
                   result.push([shortId, shortId]);
                 }
@@ -568,7 +568,7 @@ if (typeof Blockly !== "undefined") {
             }
             var options = [[Blockly.Words["ntfy_anyInstance"][systemLang], ""]];
             for (var j = 0; j < 10; j++) {
-              options.push([`ntfy-sh.${j}`, `ntfy-sh.${j}`]);
+              options.push([`ntfy-client.${j}`, `ntfy-client.${j}`]);
             }
             return options;
           }),
@@ -1187,7 +1187,7 @@ if (typeof Blockly !== "undefined") {
                 [Blockly.Words["ntfy_anyInstance"][systemLang], ""],
               ];
               for (var i = 0; i < instances.length; i++) {
-                if (instances[i].startsWith("system.adapter.ntfy-sh.")) {
+                if (instances[i].startsWith("system.adapter.ntfy-client.")) {
                   var shortId = instances[i].replace("system.adapter.", "");
                   result.push([shortId, shortId]);
                 }
@@ -1198,7 +1198,7 @@ if (typeof Blockly !== "undefined") {
             }
             var options = [[Blockly.Words["ntfy_anyInstance"][systemLang], ""]];
             for (var j = 0; j < 10; j++) {
-              options.push([`ntfy-sh.${j}`, `ntfy-sh.${j}`]);
+              options.push([`ntfy-client.${j}`, `ntfy-client.${j}`]);
             }
             return options;
           }),
@@ -1248,7 +1248,9 @@ if (typeof Blockly !== "undefined") {
       Blockly.JavaScript.ORDER_ATOMIC,
     );
 
-    var instance = dropdown_instance ? `"${dropdown_instance}"` : '"ntfy-sh.0"';
+    var instance = dropdown_instance
+      ? `"${dropdown_instance}"`
+      : '"ntfy-client.0"';
 
     var objArr = [];
     objArr.push(`topic: ${value_topic}`);
@@ -1262,7 +1264,7 @@ if (typeof Blockly !== "undefined") {
     const dropdown_instance = block.getFieldValue("INSTANCE");
     const instance = dropdown_instance
       ? `"${dropdown_instance}"`
-      : '"ntfy-sh.0"';
+      : '"ntfy-client.0"';
     const args = [];
 
     // Alle dynamischen Mutator-Felder abgreifen

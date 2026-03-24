@@ -13,7 +13,7 @@ class Ntfy extends utils.Adapter {
   constructor(options) {
     super({
       ...options,
-      name: "ntfy-sh",
+      name: "ntfy-client",
     });
     this.on("ready", this.onReady.bind(this));
     this.on("message", this.onMessage.bind(this));
@@ -30,7 +30,7 @@ class Ntfy extends utils.Adapter {
    * Is called when databases are connected and adapter received configuration.
    */
   async onReady() {
-    this.log.debug("ntfy-sh adapter starting...");
+    this.log.debug("ntfy-client adapter starting...");
 
     // Validate configuration
     if (!this.config.url) {
@@ -88,7 +88,7 @@ class Ntfy extends utils.Adapter {
       6 * 60 * 60 * 1000,
     );
 
-    this.log.info("ntfy-sh adapter started. Waiting for messages...");
+    this.log.info("ntfy-client adapter started. Waiting for messages...");
   }
 
   /**
@@ -871,7 +871,7 @@ class Ntfy extends utils.Adapter {
         this.versionCheckInterval = null;
       }
 
-      this.log.info("ntfy-sh adapter stopped.");
+      this.log.info("ntfy-client adapter stopped.");
       callback();
     } catch {
       callback();
