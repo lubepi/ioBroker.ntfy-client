@@ -834,46 +834,43 @@ if (typeof Blockly !== "undefined") {
             }
             const flyoutW = flyout.width_ || 200;
 
+            // Determine dark mode robustly by reading the actual computed fill color of the flyout background
+            let isDark = false;
+            if (flyout.svgBackground_) {
+              try {
+                const computedFill = window.getComputedStyle(
+                  flyout.svgBackground_,
+                ).fill;
+                const match = computedFill.match(
+                  /rgb\(\s*(\d+),\s*(\d+),\s*(\d+)\)/,
+                );
+                if (match) {
+                  const r = parseInt(match[1], 10);
+                  const g = parseInt(match[2], 10);
+                  const b = parseInt(match[3], 10);
+                  const brightness = (r * 299 + g * 587 + b * 114) / 1000;
+                  isDark = brightness < 128;
+                }
+              } catch (e) {
+                // Fallback if computation fails
+                isDark =
+                  window.document.body &&
+                  (window.document.body.classList.contains("dark") ||
+                    window.document.body.getAttribute("data-theme") === "dark");
+              }
+            }
+
+            const trackColor = isDark ? "#ffffff" : "#000000";
+            const trackOpacity = isDark ? "0.2" : "0.12";
+            const thumbColor = isDark ? "#ffffff" : "#000000";
+            const thumbOpacity = isDark ? "0.6" : "0.45";
+
             if (!sbGroup) {
               sbGroup = document.createElementNS(svgNS, "g");
               sbGroup.setAttribute("class", "ntfy-scrollbar");
 
-              // Determine dark mode robustly by reading the actual computed fill color of the flyout background
-              let isDark = false;
-              if (flyout.svgBackground_) {
-                try {
-                  const computedFill = window.getComputedStyle(
-                    flyout.svgBackground_,
-                  ).fill;
-                  const match = computedFill.match(
-                    /rgb\(\s*(\d+),\s*(\d+),\s*(\d+)\)/,
-                  );
-                  if (match) {
-                    const r = parseInt(match[1], 10);
-                    const g = parseInt(match[2], 10);
-                    const b = parseInt(match[3], 10);
-                    const brightness = (r * 299 + g * 587 + b * 114) / 1000;
-                    isDark = brightness < 128;
-                  }
-                } catch (e) {
-                  // Fallback if computation fails
-                  isDark =
-                    window.document.body &&
-                    (window.document.body.classList.contains("dark") ||
-                      window.document.body.getAttribute("data-theme") ===
-                        "dark");
-                }
-              }
-
-              const trackColor = isDark ? "#ffffff" : "#000000";
-              const trackOpacity = isDark ? "0.2" : "0.12";
-              const thumbColor = isDark ? "#ffffff" : "#000000";
-              const thumbOpacity = isDark ? "0.6" : "0.45";
-
               const track = document.createElementNS(svgNS, "rect");
               track.setAttribute("class", "ntfy-scrollbar-track");
-              track.setAttribute("fill", trackColor);
-              track.setAttribute("fill-opacity", trackOpacity);
               track.setAttribute("x", "0");
               track.setAttribute("y", "0");
               track.setAttribute("width", "6");
@@ -883,8 +880,6 @@ if (typeof Blockly !== "undefined") {
 
               const thumb = document.createElementNS(svgNS, "rect");
               thumb.setAttribute("class", "ntfy-scrollbar-thumb");
-              thumb.setAttribute("fill", thumbColor);
-              thumb.setAttribute("fill-opacity", thumbOpacity);
               thumb.setAttribute("x", "0");
               thumb.setAttribute("y", "0");
               thumb.setAttribute("width", "6");
@@ -897,6 +892,11 @@ if (typeof Blockly !== "undefined") {
 
             const track = sbGroup.querySelector(".ntfy-scrollbar-track");
             const thumb = sbGroup.querySelector(".ntfy-scrollbar-thumb");
+
+            track.setAttribute("fill", trackColor);
+            track.setAttribute("fill-opacity", trackOpacity);
+            thumb.setAttribute("fill", thumbColor);
+            thumb.setAttribute("fill-opacity", thumbOpacity);
 
             // Position scrollbar at the right edge of the flyout, slightly inset
             sbGroup.setAttribute(
