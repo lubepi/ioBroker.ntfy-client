@@ -719,7 +719,11 @@ if (typeof Blockly !== "undefined") {
             defs = Blockly.utils.xml.createElement("defs");
             ownerSvg.insertBefore(defs, ownerSvg.firstChild);
           }
-          const clipId = `ntfy_flyout_clip_${workspace.id || "mut"}`;
+          let safeId = "mut";
+          if (workspace.id) {
+            safeId = workspace.id.replace(/[^a-zA-Z0-9]/g, "");
+          }
+          const clipId = `ntfy_flyout_clip_${safeId}`;
           let clipPath = defs.querySelector(`#${clipId}`);
           if (!clipPath) {
             clipPath = Blockly.utils.xml.createElement("clipPath");
