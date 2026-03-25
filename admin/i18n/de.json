@@ -5,7 +5,7 @@
     "Configure topics to subscribe to. The adapter will receive messages from these topics in real-time via SSE (Server-Sent Events).": "Konfigurieren Sie Topics zum Abonnieren. Der Adapter empfängt Nachrichten von diesen Topics in Echtzeit über SSE (Server-Sent Events).",
     "Connection": "Verbindung",
     "Default Topic": "Standard-Topic",
-    "Default topic for notifications (used when no topic is specified in the message)": "Standard-Topic für Benachrichtigungen (wird verwendet, wenn kein Topic in der Nachricht angegeben ist)",
+    "Default topic for notifications": "Standard-Topic für Benachrichtigungen",
     "Default: https://ntfy.sh": "Standard: https://ntfy.sh",
     "Display Name": "Anzeigename",
     "None": "Keine",
@@ -15,5 +15,7 @@
     "Topics": "Topics",
     "Username": "Benutzername",
     "Username / Password": "Benutzername / Passwort",
-    "ntfy Server URL": "ntfy Server URL"
+    "ntfy Server URL": "ntfy Server URL",
+    "Server Configuration": "Server-Konfiguration",
+    "Authentication": "Authentifizierung"
 }
