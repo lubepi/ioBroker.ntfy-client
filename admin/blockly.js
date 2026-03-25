@@ -575,7 +575,7 @@ if (typeof Blockly !== "undefined") {
           "INSTANCE",
         );
 
-      // Initiale Attribute setzen
+      // Set initial attributes
       this.attributes_ = ["message", "topic", "title", "priority"];
 
       this.updateMutator_();
@@ -1025,7 +1025,7 @@ if (typeof Blockly !== "undefined") {
           itemBlock.nextConnection && itemBlock.nextConnection.targetBlock();
       }
 
-      // Trenne Verbindungen von gelöschten Attributen
+      // Disconnect connections of deleted attributes
       for (const attrName of oldAttributes) {
         if (!this.attributes_.includes(attrName)) {
           const input = this.getInput(attrName);
@@ -1038,7 +1038,7 @@ if (typeof Blockly !== "undefined") {
       this.updateShape_();
       this.updateMutator_();
 
-      // Verbinde Blöcke wieder
+      // Reconnect blocks
       for (const attrName of this.attributes_) {
         if (connections[attrName]) {
           const input = this.getInput(attrName);
@@ -1090,7 +1090,7 @@ if (typeof Blockly !== "undefined") {
     },
 
     updateShape_: function () {
-      // 1. Alle dynamischen Inputs löschen, die NICHT mehr im attributes_ Array stehen
+      // 1. Delete all dynamic inputs that are NO LONGER in the attributes_ array
       const allPossibleKeys = ntfyMutatorOptions.map((o) => o.key);
       for (const key of allPossibleKeys) {
         if (!this.attributes_.includes(key) && this.getInput(key)) {
@@ -1098,7 +1098,7 @@ if (typeof Blockly !== "undefined") {
         }
       }
 
-      // 2. Benötigte Inputs generieren (oder updaten)
+      // 2. Generate (or update) required inputs
       for (const attrName of this.attributes_) {
         const opt = ntfyMutatorOptions.find((o) => o.key === attrName);
         if (!opt) {
@@ -1140,13 +1140,14 @@ if (typeof Blockly !== "undefined") {
             );
             input.appendField(fieldText);
 
-            // Shadow-Blöcke (Textfelder) generieren
+            // Generate shadow blocks (text fields)
             setTimeout(
               (__input) => {
                 if (
                   __input.connection &&
                   !__input.connection.isConnected() &&
-                  this.workspace
+                  this.workspace &&
+                  this.getInput(attrName) === __input
                 ) {
                   const _shadow = this.workspace.newBlock("text");
                   _shadow.setShadow(true);
@@ -1161,14 +1162,14 @@ if (typeof Blockly !== "undefined") {
           }
         }
 
-        // Erzwinge die Live-Umsortierung passend zum Mutator-Arbeitsbereich!
-        // Indem wir jeden Block nacheinander an das Ende der Liste schieben,
-        // entsteht automatisch die identische Sortierung wie im Mutator-Fenster.
+        // Force live sorting to match the mutator workspace!
+        // By moving each block one after another to the end of the list,
+        // we automatically create the identical sorting as in the mutator window.
         if (typeof this.moveInputBefore === "function") {
           try {
             this.moveInputBefore(attrName, null);
           } catch (e) {
-            // Falls alte Blockly-Versionen null als refName ablehnen
+            // If old Blockly versions reject null as refName
           }
         }
       }
@@ -1267,38 +1268,38 @@ if (typeof Blockly !== "undefined") {
       : '"ntfy-client.0"';
     const args = [];
 
-    // Alle dynamischen Mutator-Felder abgreifen
+    // Gather all dynamic mutator fields
     for (const attrName of block.attributes_) {
       let vArgument;
 
       if (ntfyBooleanOptions.includes(attrName)) {
-        // Logik für Checkboxen
+        // Logic for checkboxes
         vArgument =
           block.getFieldValue(`FIELD_${attrName}`) === "TRUE"
             ? "true"
             : "false";
 
-        // Bei cache und firebase triggern wir "Disable", müssen den Boolean also invertieren
+        // For cache and firebase we trigger "Disable", so we have to invert the boolean
         if (attrName === "cache" || attrName === "firebase") {
           vArgument = vArgument === "true" ? "false" : "true";
         }
       } else if (attrName === "priority") {
-        // Logik für Dropdown
+        // Logic for dropdown
         const prioVal = block.getFieldValue(`FIELD_${attrName}`);
         if (prioVal !== "default") {
           vArgument = `"${prioVal}"`;
         } else {
-          continue; // Überspringen, wenn default
+          continue; // Skip if default
         }
       } else {
-        // Logik für Value-Inputs (Texte, Variablen)
+        // Logic for value inputs (texts, variables)
         vArgument = Blockly.JavaScript.valueToCode(
           block,
           attrName,
           Blockly.JavaScript.ORDER_COMMA,
         );
 
-        // Umschließende Single-Quotes von JSON-Strings bereinigen
+        // Clean up enclosing single quotes from JSON strings
         if (
           vArgument &&
           vArgument.startsWith(`'{`) &&
@@ -1308,7 +1309,7 @@ if (typeof Blockly !== "undefined") {
         }
       }
 
-      // Nur pushen, wenn wirklich Inhalt da ist
+      // Only push if there is actually content
       if (
         vArgument &&
         vArgument !== "''" &&
@@ -1322,7 +1323,7 @@ if (typeof Blockly !== "undefined") {
       }
     }
 
-    // Code zusammenbauen
+    // Assemble code
     const argStr = args.length
       ? args
           .map((a) =>
