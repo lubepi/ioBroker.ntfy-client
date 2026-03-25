@@ -65,6 +65,9 @@ class Ntfy extends utils.Adapter {
     await this.setStateAsync("info.connection", true, true);
 
     // Subscribe to configured topics
+    this.log.debug("Cleaning up orphaned topics...");
+    await this.cleanupTopics();
+
     this.log.debug("Subscribing to configured topics...");
     await this.subscribeToTopics();
 
@@ -496,6 +499,46 @@ class Ntfy extends utils.Adapter {
       headers["Authorization"] = `Bearer ${this.config.token}`;
     }
     return headers;
+  }
+
+  /**
+   * Remove orphaned topics from ioBroker that are no longer in the configuration.
+   */
+  async cleanupTopics() {
+    this.log.debug("Starting topic cleanup process...");
+    const currentTopics = (this.config.topics || []).map((t) =>
+      this.sanitizeTopicName(typeof t === "object" ? t.topic : t),
+    );
+
+    try {
+      // Get all existing topic objects
+      const objects = await this.getAdapterObjectsAsync();
+      const topicPrefix = `${this.namespace}.topics.`;
+
+      // Find unique topic names from the object tree
+      const existingTopics = new Set();
+      for (const id of Object.keys(objects)) {
+        if (id.startsWith(topicPrefix)) {
+          const parts = id.replace(topicPrefix, "").split(".");
+          if (parts[0]) {
+            existingTopics.add(parts[0]);
+          }
+        }
+      }
+
+      // Delete topics that are no longer in config
+      for (const topicId of existingTopics) {
+        if (!currentTopics.includes(topicId)) {
+          this.log.info(
+            `Topic "${topicId}" is no longer in configuration. Deleting objects...`,
+          );
+          // Delete the entire channel/folder and all its states
+          await this.delObjectAsync(`topics.${topicId}`, { recursive: true });
+        }
+      }
+    } catch (error) {
+      this.log.error(`Failed to cleanup orphaned topics: ${error.message}`);
+    }
   }
 
   /**
