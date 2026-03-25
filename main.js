@@ -1294,6 +1294,9 @@ class Ntfy extends utils.Adapter {
       template !== "" &&
       template !== false
     ) {
+      // Set the Content-Type header so the body is properly transmitted and recognized as JSON
+      headers["Content-Type"] = "application/json";
+
       const tplVal =
         template === true || template === "yes" || template === "1"
           ? "yes"
