@@ -6,17 +6,38 @@
       "type": "panel",
       "label": "Connection",
       "items": {
+        "_serverHeader": {
+          "type": "header",
+          "text": "Server Configuration",
+          "size": 5
+        },
         "url": {
           "type": "text",
           "label": "ntfy Server URL",
           "xs": 12,
           "sm": 12,
-          "md": 8,
-          "lg": 8,
-          "xl": 8,
+          "md": 6,
+          "lg": 4,
+          "xl": 4,
           "help": "Default: https://ntfy.sh",
           "placeholder": "https://ntfy.sh",
           "validator": "data.url === '' || /^https?:\\/\\/.+/.test(data.url)"
+        },
+        "defaultTopic": {
+          "type": "text",
+          "label": "Default Topic",
+          "xs": 12,
+          "sm": 12,
+          "md": 6,
+          "lg": 4,
+          "xl": 4,
+          "help": "Default topic for notifications"
+        },
+        "_authHeader": {
+          "type": "header",
+          "text": "Authentication",
+          "size": 5,
+          "newLine": true
         },
         "authType": {
           "type": "select",
@@ -24,8 +45,8 @@
           "xs": 12,
           "sm": 12,
           "md": 4,
-          "lg": 4,
-          "xl": 4,
+          "lg": 3,
+          "xl": 3,
           "options": [
             { "label": "None", "value": "none" },
             { "label": "Username / Password", "value": "user" },
@@ -38,9 +59,9 @@
           "label": "Username",
           "xs": 12,
           "sm": 12,
-          "md": 6,
-          "lg": 6,
-          "xl": 6,
+          "md": 4,
+          "lg": 3,
+          "xl": 3,
           "hidden": "data.authType !== 'user'"
         },
         "pass": {
@@ -48,9 +69,9 @@
           "label": "Password",
           "xs": 12,
           "sm": 12,
-          "md": 6,
-          "lg": 6,
-          "xl": 6,
+          "md": 4,
+          "lg": 3,
+          "xl": 3,
           "hidden": "data.authType !== 'user'"
         },
         "token": {
@@ -58,20 +79,10 @@
           "label": "Access Token",
           "xs": 12,
           "sm": 12,
-          "md": 12,
-          "lg": 12,
-          "xl": 12,
-          "hidden": "data.authType !== 'token'"
-        },
-        "defaultTopic": {
-          "type": "text",
-          "label": "Default Topic",
-          "xs": 12,
-          "sm": 12,
           "md": 8,
-          "lg": 8,
-          "xl": 8,
-          "help": "Default topic for notifications (used when no topic is specified in the message)"
+          "lg": 6,
+          "xl": 6,
+          "hidden": "data.authType !== 'token'"
         }
       }
     },
