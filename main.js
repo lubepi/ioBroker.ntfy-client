@@ -314,18 +314,19 @@ class Ntfy extends utils.Adapter {
     }
   }
 
-  /**
+   /**
    * Create states for a subscribed topic.
    *
    * @param {string} topicName - The topic name
+   * @param {string} [displayName] - Optional display name for the topic channel
    */
-  async createTopicStates(topicName) {
+  async createTopicStates(topicName, displayName) {
     const safeName = this.sanitizeTopicName(topicName);
 
     await this.setObjectNotExistsAsync(`topics.${safeName}`, {
       type: "channel",
       common: {
-        name: topicName,
+        name: displayName || topicName,
       },
       native: {},
     });
@@ -372,7 +373,6 @@ class Ntfy extends utils.Adapter {
         name: "Last message timestamp",
         type: "number",
         role: "date",
-        unit: "ms",
       },
       {
         id: `topics.${safeName}.lastMessageId`,
@@ -428,14 +428,12 @@ class Ntfy extends utils.Adapter {
         name: "Last received attachment expiry",
         type: "number",
         role: "date",
-        unit: "ms",
       },
       {
         id: `topics.${safeName}.lastExpires`,
         name: "Last message expiry",
         type: "number",
         role: "date",
-        unit: "ms",
       },
       {
         id: `topics.${safeName}.lastJson`,
@@ -560,8 +558,11 @@ class Ntfy extends utils.Adapter {
       }
 
       try {
-        this.log.debug(`Attempting to subscribe to topic: ${topicName}`);
-        await this.subscribeToTopic(url, topicName);
+        const description = topicConfig.description || "";
+        this.log.debug(
+          `Attempting to subscribe to topic: ${topicName} (Display Name: ${description || "none"})`,
+        );
+        await this.subscribeToTopic(url, topicName, description);
         this.log.debug(`Successfully subscribed to topic: ${topicName}`);
       } catch (error) {
         this.log.error(
@@ -576,10 +577,15 @@ class Ntfy extends utils.Adapter {
    *
    * @param {string} url - Server URL
    * @param {string} topicName - Topic name
+   * @param {string} [displayName] - Optional display name
    */
-  async subscribeToTopic(url, topicName) {
+  async subscribeToTopic(url, topicName, displayName) {
     this.log.debug(`Creating SSE subscription for topic "${topicName}"...`);
     const safeName = this.sanitizeTopicName(topicName);
+
+    // Create objects first
+    await this.createTopicStates(topicName, displayName);
+
     const sseUrl = `${url}/${encodeURIComponent(topicName)}/sse`;
     this.log.debug(`SSE URL: ${sseUrl}`);
 
