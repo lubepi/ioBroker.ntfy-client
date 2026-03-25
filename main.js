@@ -377,6 +377,66 @@ class Ntfy extends utils.Adapter {
         role: "text",
       },
       {
+        id: `topics.${safeName}.lastTopic`,
+        name: "Last received topic",
+        type: "string",
+        role: "text",
+      },
+      {
+        id: `topics.${safeName}.lastEvent`,
+        name: "Last received event",
+        type: "string",
+        role: "text",
+      },
+      {
+        id: `topics.${safeName}.lastIcon`,
+        name: "Last received icon URL",
+        type: "string",
+        role: "url",
+      },
+      {
+        id: `topics.${safeName}.lastActions`,
+        name: "Last received actions (JSON)",
+        type: "string",
+        role: "json",
+      },
+      {
+        id: `topics.${safeName}.lastAttachmentName`,
+        name: "Last received attachment name",
+        type: "string",
+        role: "text",
+      },
+      {
+        id: `topics.${safeName}.lastAttachmentType`,
+        name: "Last received attachment type",
+        type: "string",
+        role: "text",
+      },
+      {
+        id: `topics.${safeName}.lastAttachmentSize`,
+        name: "Last received attachment size",
+        type: "number",
+        role: "value.bytes",
+      },
+      {
+        id: `topics.${safeName}.lastAttachmentExpires`,
+        name: "Last received attachment expiry",
+        type: "number",
+        role: "date",
+      },
+      {
+        id: `topics.${safeName}.lastExpires`,
+        name: "Last message expiry",
+        type: "number",
+        role: "date",
+      },
+      {
+        id: `topics.${safeName}.lastExpires`,
+        name: "Last message expiry",
+        type: "number",
+        role: "date",
+      },
+      {
         id: `topics.${safeName}.lastJson`,
         name: "Last received full JSON",
         type: "string",
@@ -599,6 +659,58 @@ class Ntfy extends utils.Adapter {
       true,
     );
     await this.setStateAsync(
+      `topics.${safeName}.lastTopic`,
+      data.topic || "",
+      true,
+    );
+    await this.setStateAsync(
+      `topics.${safeName}.lastEvent`,
+      data.event || "",
+      true,
+    );
+    await this.setStateAsync(
+      `topics.${safeName}.lastIcon`,
+      data.icon || "",
+      true,
+    );
+    await this.setStateAsync(
+      `topics.${safeName}.lastActions`,
+      data.actions ? JSON.stringify(data.actions) : "",
+      true,
+    );
+    await this.setStateAsync(
+      `topics.${safeName}.lastAttachmentName`,
+      data.attachment && data.attachment.name ? data.attachment.name : "",
+      true,
+    );
+    await this.setStateAsync(
+      `topics.${safeName}.lastAttachmentType`,
+      data.attachment && data.attachment.type ? data.attachment.type : "",
+      true,
+    );
+    await this.setStateAsync(
+      `topics.${safeName}.lastAttachmentSize`,
+      data.attachment && data.attachment.size ? data.attachment.size : 0,
+      true,
+    );
+    await this.setStateAsync(
+      `topics.${safeName}.lastAttachmentExpires`,
+      data.attachment && data.attachment.expires
+        ? data.attachment.expires * 1000
+        : 0,
+      true,
+    );
+    await this.setStateAsync(
+      `topics.${safeName}.lastExpires`,
+      data.expires ? data.expires * 1000 : 0,
+      true,
+    );
+    await this.setStateAsync(
+      `topics.${safeName}.lastExpires`,
+      data.expires ? data.expires * 1000 : 0,
+      true,
+    );
+    await this.setStateAsync(
       `topics.${safeName}.lastJson`,
       JSON.stringify(data),
       true,
@@ -612,6 +724,34 @@ class Ntfy extends utils.Adapter {
     this.log.debug("Starting account statistics fetch...");
     const url = (this.config.url || "https://ntfy.sh").replace(/\/+$/, "");
     const authHeaders = this.getAuthHeaders();
+
+    // Reset stats to null (states are not available on this server)
+    const resetStats = [
+      "stats.messages.published",
+      "stats.messages.remaining",
+      "stats.messages.limit",
+      "stats.messages.expiryDuration",
+      "stats.emails.sent",
+      "stats.emails.remaining",
+      "stats.emails.limit",
+      "stats.calls.made",
+      "stats.calls.remaining",
+      "stats.calls.limit",
+      "stats.reservations.count",
+      "stats.reservations.remaining",
+      "stats.reservations.limit",
+      "stats.attachments.storage",
+      "stats.attachments.storageRemaining",
+      "stats.attachments.storageLimit",
+      "stats.attachments.expiryDuration",
+      "stats.attachments.fileSizeLimit",
+      "stats.attachments.bandwidthLimit",
+    ];
+
+    for (const statId of resetStats) {
+      await this.setStateAsync(statId, { val: null, ack: true });
+    }
+    await this.setStateAsync("stats.account.tier", { val: "none", ack: true });
 
     // Only fetch if authenticated
     if (!authHeaders["Authorization"]) {
