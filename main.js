@@ -717,41 +717,10 @@ class Ntfy extends utils.Adapter {
     );
   }
 
-  /**
-   * Fetch account statistics from the ntfy server.
-   */
   async fetchAccountStats() {
     this.log.debug("Starting account statistics fetch...");
     const url = (this.config.url || "https://ntfy.sh").replace(/\/+$/, "");
     const authHeaders = this.getAuthHeaders();
-
-    // Reset stats to null (states are not available on this server)
-    const resetStats = [
-      "stats.messages.published",
-      "stats.messages.remaining",
-      "stats.messages.limit",
-      "stats.messages.expiryDuration",
-      "stats.emails.sent",
-      "stats.emails.remaining",
-      "stats.emails.limit",
-      "stats.calls.made",
-      "stats.calls.remaining",
-      "stats.calls.limit",
-      "stats.reservations.count",
-      "stats.reservations.remaining",
-      "stats.reservations.limit",
-      "stats.attachments.storage",
-      "stats.attachments.storageRemaining",
-      "stats.attachments.storageLimit",
-      "stats.attachments.expiryDuration",
-      "stats.attachments.fileSizeLimit",
-      "stats.attachments.bandwidthLimit",
-    ];
-
-    for (const statId of resetStats) {
-      await this.setStateAsync(statId, { val: null, ack: true });
-    }
-    await this.setStateAsync("stats.account.tier", { val: "none", ack: true });
 
     // Only fetch if authenticated
     if (!authHeaders["Authorization"]) {
