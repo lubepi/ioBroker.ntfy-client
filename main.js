@@ -314,7 +314,7 @@ class Ntfy extends utils.Adapter {
     }
   }
 
-   /**
+  /**
    * Create states for a subscribed topic.
    *
    * @param {string} topicName - The topic name
@@ -558,11 +558,11 @@ class Ntfy extends utils.Adapter {
       }
 
       try {
-        const description = topicConfig.description || "";
+        const displayName = topicConfig.displayName || "";
         this.log.debug(
-          `Attempting to subscribe to topic: ${topicName} (Display Name: ${description || "none"})`,
+          `Attempting to subscribe to topic: ${topicName} (Display Name: ${displayName || "none"})`,
         );
-        await this.subscribeToTopic(url, topicName, description);
+        await this.subscribeToTopic(url, topicName, displayName);
         this.log.debug(`Successfully subscribed to topic: ${topicName}`);
       } catch (error) {
         this.log.error(
