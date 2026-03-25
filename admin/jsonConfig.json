@@ -9,7 +9,7 @@
         "_serverHeader": {
           "type": "header",
           "text": "Server Configuration",
-          "size": 5
+          "size": 4
         },
         "url": {
           "type": "text",
@@ -36,7 +36,7 @@
         "_authHeader": {
           "type": "header",
           "text": "Authentication",
-          "size": 5,
+          "size": 4,
           "newLine": true
         },
         "authType": {
