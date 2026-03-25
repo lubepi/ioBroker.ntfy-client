@@ -323,7 +323,8 @@ class Ntfy extends utils.Adapter {
   async createTopicStates(topicName, displayName) {
     const safeName = this.sanitizeTopicName(topicName);
 
-    await this.setObjectNotExistsAsync(`topics.${safeName}`, {
+    // Create/Update channel object for the topic (using extendObjectAsync to ensure name updates from config are applied)
+    await this.extendObjectAsync(`topics.${safeName}`, {
       type: "channel",
       common: {
         name: displayName || topicName,
