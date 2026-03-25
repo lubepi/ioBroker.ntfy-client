@@ -173,7 +173,7 @@ class Ntfy extends utils.Adapter {
         id: "stats.messages.expiryDuration",
         name: "Messages expiry duration (seconds)",
         type: "number",
-        role: "value",
+        role: "value.interval",
         unit: "s",
       },
       // Email stats
@@ -238,42 +238,42 @@ class Ntfy extends utils.Adapter {
         id: "stats.attachments.storage",
         name: "Attachment storage used (bytes)",
         type: "number",
-        role: "value",
+        role: "value.bytes",
         unit: "bytes",
       },
       {
         id: "stats.attachments.storageRemaining",
         name: "Attachment storage remaining (bytes)",
         type: "number",
-        role: "value",
+        role: "value.bytes",
         unit: "bytes",
       },
       {
         id: "stats.attachments.storageLimit",
         name: "Attachment storage limit (bytes)",
         type: "number",
-        role: "value",
+        role: "value.bytes",
         unit: "bytes",
       },
       {
         id: "stats.attachments.expiryDuration",
         name: "Attachment expiry duration (seconds)",
         type: "number",
-        role: "value",
+        role: "value.interval",
         unit: "s",
       },
       {
         id: "stats.attachments.fileSizeLimit",
         name: "Attachment file size limit (bytes)",
         type: "number",
-        role: "value",
+        role: "value.bytes",
         unit: "bytes",
       },
       {
         id: "stats.attachments.bandwidthLimit",
         name: "Attachment bandwidth limit (bytes)",
         type: "number",
-        role: "value",
+        role: "value.bytes",
         unit: "bytes",
       },
       // Account
@@ -281,7 +281,7 @@ class Ntfy extends utils.Adapter {
         id: "stats.account.tier",
         name: "Subscription tier",
         type: "string",
-        role: "text",
+        role: "info.status",
       },
     ];
 
@@ -356,19 +356,20 @@ class Ntfy extends utils.Adapter {
         id: `topics.${safeName}.lastClick`,
         name: "Last received click URL",
         type: "string",
-        role: "url",
+        role: "text.url",
       },
       {
         id: `topics.${safeName}.lastAttachmentUrl`,
         name: "Last received attachment URL",
         type: "string",
-        role: "url",
+        role: "text.url",
       },
       {
         id: `topics.${safeName}.lastTimestamp`,
         name: "Last message timestamp",
         type: "number",
         role: "date",
+        unit: "ms",
       },
       {
         id: `topics.${safeName}.lastMessageId`,
@@ -392,7 +393,7 @@ class Ntfy extends utils.Adapter {
         id: `topics.${safeName}.lastIcon`,
         name: "Last received icon URL",
         type: "string",
-        role: "url",
+        role: "text.url",
       },
       {
         id: `topics.${safeName}.lastActions`,
@@ -417,24 +418,21 @@ class Ntfy extends utils.Adapter {
         name: "Last received attachment size",
         type: "number",
         role: "value.bytes",
+        unit: "bytes",
       },
       {
         id: `topics.${safeName}.lastAttachmentExpires`,
         name: "Last received attachment expiry",
         type: "number",
         role: "date",
+        unit: "ms",
       },
       {
         id: `topics.${safeName}.lastExpires`,
         name: "Last message expiry",
         type: "number",
         role: "date",
-      },
-      {
-        id: `topics.${safeName}.lastExpires`,
-        name: "Last message expiry",
-        type: "number",
-        role: "date",
+        unit: "ms",
       },
       {
         id: `topics.${safeName}.lastJson`,
@@ -462,6 +460,7 @@ class Ntfy extends utils.Adapter {
           read: true,
           write: false,
           def: defValue,
+          unit: state.unit,
         },
         native: {},
       });
@@ -718,7 +717,7 @@ class Ntfy extends utils.Adapter {
   }
 
   async fetchAccountStats() {
-    this.log.debug("Starting account statistics fetch...");
+    this.log.debug("Triggering account statistics update...");
     const url = (this.config.url || "https://ntfy.sh").replace(/\/+$/, "");
     const authHeaders = this.getAuthHeaders();
 
@@ -741,7 +740,11 @@ class Ntfy extends utils.Adapter {
       if (account.role) {
         await this.setStateAsync(
           "stats.account.tier",
-          account.tier || account.role || "free",
+          account.tier !== undefined
+            ? account.tier
+            : account.role !== undefined
+              ? account.role
+              : "none",
           true,
         );
       }
@@ -750,43 +753,57 @@ class Ntfy extends utils.Adapter {
         const limits = account.limits;
         await this.setStateAsync(
           "stats.messages.limit",
-          limits.messages || 0,
+          limits.messages !== undefined ? limits.messages : null,
           true,
         );
         await this.setStateAsync(
           "stats.messages.expiryDuration",
-          limits.messages_expiry_duration || 0,
+          limits.messages_expiry_duration !== undefined
+            ? limits.messages_expiry_duration
+            : null,
           true,
         );
         await this.setStateAsync(
           "stats.emails.limit",
-          limits.emails || 0,
+          limits.emails !== undefined ? limits.emails : null,
           true,
         );
-        await this.setStateAsync("stats.calls.limit", limits.calls || 0, true);
+        await this.setStateAsync(
+          "stats.calls.limit",
+          limits.calls !== undefined ? limits.calls : null,
+          true,
+        );
         await this.setStateAsync(
           "stats.reservations.limit",
-          limits.reservations || 0,
+          limits.reservations !== undefined ? limits.reservations : null,
           true,
         );
         await this.setStateAsync(
           "stats.attachments.storageLimit",
-          limits.attachment_total_size || 0,
+          limits.attachment_total_size !== undefined
+            ? limits.attachment_total_size
+            : null,
           true,
         );
         await this.setStateAsync(
           "stats.attachments.fileSizeLimit",
-          limits.attachment_file_size || 0,
+          limits.attachment_file_size !== undefined
+            ? limits.attachment_file_size
+            : null,
           true,
         );
         await this.setStateAsync(
           "stats.attachments.expiryDuration",
-          limits.attachment_expiry_duration || 0,
+          limits.attachment_expiry_duration !== undefined
+            ? limits.attachment_expiry_duration
+            : null,
           true,
         );
         await this.setStateAsync(
           "stats.attachments.bandwidthLimit",
-          limits.attachment_bandwidth || 0,
+          limits.attachment_bandwidth !== undefined
+            ? limits.attachment_bandwidth
+            : null,
           true,
         );
       }
@@ -795,44 +812,60 @@ class Ntfy extends utils.Adapter {
         const stats = account.stats;
         await this.setStateAsync(
           "stats.messages.published",
-          stats.messages || 0,
+          stats.messages !== undefined ? stats.messages : null,
           true,
         );
         await this.setStateAsync(
           "stats.messages.remaining",
-          stats.messages_remaining || 0,
+          stats.messages_remaining !== undefined
+            ? stats.messages_remaining
+            : null,
           true,
         );
-        await this.setStateAsync("stats.emails.sent", stats.emails || 0, true);
+        await this.setStateAsync(
+          "stats.emails.sent",
+          stats.emails !== undefined ? stats.emails : null,
+          true,
+        );
         await this.setStateAsync(
           "stats.emails.remaining",
-          stats.emails_remaining || 0,
+          stats.emails_remaining !== undefined ? stats.emails_remaining : null,
           true,
         );
-        await this.setStateAsync("stats.calls.made", stats.calls || 0, true);
+        await this.setStateAsync(
+          "stats.calls.made",
+          stats.calls !== undefined ? stats.calls : null,
+          true,
+        );
         await this.setStateAsync(
           "stats.calls.remaining",
-          stats.calls_remaining || 0,
+          stats.calls_remaining !== undefined ? stats.calls_remaining : null,
           true,
         );
         await this.setStateAsync(
           "stats.reservations.count",
-          stats.reservations || 0,
+          stats.reservations !== undefined ? stats.reservations : null,
           true,
         );
         await this.setStateAsync(
           "stats.reservations.remaining",
-          stats.reservations_remaining || 0,
+          stats.reservations_remaining !== undefined
+            ? stats.reservations_remaining
+            : null,
           true,
         );
         await this.setStateAsync(
           "stats.attachments.storage",
-          stats.attachment_total_size || 0,
+          stats.attachment_total_size !== undefined
+            ? stats.attachment_total_size
+            : null,
           true,
         );
         await this.setStateAsync(
           "stats.attachments.storageRemaining",
-          stats.attachment_total_size_remaining || 0,
+          stats.attachment_total_size_remaining !== undefined
+            ? stats.attachment_total_size_remaining
+            : null,
           true,
         );
       }
@@ -856,6 +889,7 @@ class Ntfy extends utils.Adapter {
    * Check the ntfy server version and compare with latest available.
    */
   async checkServerVersion() {
+    this.log.debug("Triggering server version and update check...");
     this.log.debug("Starting server version check...");
     const url = (this.config.url || "https://ntfy.sh").replace(/\/+$/, "");
     const authHeaders = this.getAuthHeaders();
@@ -1291,6 +1325,10 @@ class Ntfy extends utils.Adapter {
       this.log.debug(
         `Notification successfully sent to topic "${topic}" (HTTP ${response.status})`,
       );
+
+      // Refresh account stats after sending (to update remaining limits/storage)
+      await this.fetchAccountStats();
+
       return response.data || {};
     } catch (error) {
       this.log.error(
@@ -1512,6 +1550,10 @@ class Ntfy extends utils.Adapter {
       this.log.debug(
         `File attachment successfully sent to topic "${topic}" (HTTP ${response.status})`,
       );
+
+      // Refresh account stats after sending (to update remaining limits/storage)
+      await this.fetchAccountStats();
+
       return response.data || {};
     } catch (error) {
       this.log.error(
