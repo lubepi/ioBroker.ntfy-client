@@ -1,7 +1,16 @@
 ![Logo](admin/ntfy-client.png)
 # ioBroker.ntfy-client
 
-## Unofficial ntfy.sh client adapter for ioBroker
+[![NPM version](https://img.shields.io/npm/v/iobroker.ntfy-client.svg)](https://www.npmjs.com/package/iobroker.ntfy-client)
+[![Downloads](https://img.shields.io/npm/dm/iobroker.ntfy-client.svg)](https://www.npmjs.com/package/iobroker.ntfy-client)
+![Number of Installations](https://iobroker.live/badges/ntfy-client-installed.svg)
+![Current version in stable repository](https://iobroker.live/badges/ntfy-client-stable.svg)
+
+[![NPM](https://nodei.co/npm/iobroker.ntfy-client.png?downloads=true)](https://nodei.co/npm/iobroker.ntfy-client/)
+
+**Tests:** [![Test and Release](https://github.com/lubepi/ioBroker.ntfy-client/workflows/Test%20and%20Release/badge.svg)](https://github.com/lubepi/ioBroker.ntfy-client/actions?query=workflow%3A%22Test+and+Release%22)
+
+Unofficial ntfy.sh client adapter for ioBroker
 
 Send and receive notifications via [ntfy.sh](https://ntfy.sh) directly from ioBroker. This adapter is a community project and not affiliated with ntfy LLC.
 
