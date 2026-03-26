@@ -501,6 +501,57 @@ class Ntfy extends utils.Adapter {
   }
 
   /**
+   * Format the error response data for logging.
+   *
+   * @param {any} data - The error response data
+   * @returns {string} Formatted error data
+   */
+  formatErrorResponse(data) {
+    if (!data) {
+      return "No response data";
+    }
+
+    if (typeof data === "object") {
+      try {
+        return JSON.stringify(data);
+      } catch {
+        return "Invalid object structure";
+      }
+    }
+
+    if (typeof data === "string") {
+      const trimmed = data.trim();
+      if (
+        trimmed.toLowerCase().startsWith("<!doctype") ||
+        trimmed.toLowerCase().startsWith("<html")
+      ) {
+        // It's likely HTML, probably a proxy error page (like Nginx 502)
+        const titleMatch = trimmed.match(/<title>(.*?)<\/title>/i);
+        if (titleMatch && titleMatch[1]) {
+          return `HTML Error: ${titleMatch[1].trim()}`;
+        }
+
+        // Fallback: extract some text from body if possible
+        const bodyMatch = trimmed.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
+        if (bodyMatch && bodyMatch[1]) {
+          const bodyText = bodyMatch[1]
+            .replace(/<[^>]+>/g, " ")
+            .replace(/\s+/g, " ")
+            .trim();
+          if (bodyText) {
+            return `HTML Error: ${bodyText.substring(0, 150)}${bodyText.length > 150 ? "..." : ""}`;
+          }
+        }
+
+        return `HTML Error: ${trimmed.substring(0, 100)}${trimmed.length > 100 ? "..." : ""}`;
+      }
+      return trimmed;
+    }
+
+    return String(data);
+  }
+
+  /**
    * Remove orphaned topics from ioBroker that are no longer in the configuration.
    */
   async cleanupTopics() {
@@ -1389,10 +1440,7 @@ class Ntfy extends utils.Adapter {
       );
       if (error.response) {
         const status = error.response.status;
-        const data =
-          typeof error.response.data === "string"
-            ? error.response.data
-            : JSON.stringify(error.response.data);
+        const data = this.formatErrorResponse(error.response.data);
         throw new Error(`ntfy server returned HTTP ${status}: ${data}`, {
           cause: error,
         });
@@ -1461,6 +1509,49 @@ class Ntfy extends utils.Adapter {
     // Determine filename from path if not specified
     if (!filename) {
       filename = path.basename(filePath);
+    }
+
+    // Check if the file size exceeds the server's limits if stats are available
+    try {
+      const fileStats = fs.statSync(filePath);
+      const fileSize = fileStats.size;
+
+      const storageRemainingState = await this.getStateAsync(
+        "stats.attachments.storageRemaining",
+      );
+      const fileSizeLimitState = await this.getStateAsync(
+        "stats.attachments.fileSizeLimit",
+      );
+
+      if (
+        fileSizeLimitState &&
+        fileSizeLimitState.val !== null &&
+        fileSizeLimitState.val > 0
+      ) {
+        if (fileSize > fileSizeLimitState.val) {
+          throw new Error(
+            `File size (${fileSize} bytes) exceeds the ntfy server's file size limit (${fileSizeLimitState.val} bytes).`,
+          );
+        }
+      }
+
+      if (
+        storageRemainingState &&
+        storageRemainingState.val !== null &&
+        storageRemainingState.val >= 0
+      ) {
+        // Only check if limited (some servers might return a huge number for unlimited, or null)
+        if (fileSize > storageRemainingState.val) {
+          throw new Error(
+            `File size (${fileSize} bytes) exceeds the remaining storage space on the ntfy server (${storageRemainingState.val} bytes).`,
+          );
+        }
+      }
+    } catch (e) {
+      if (e.message.includes("exceeds")) {
+        throw e;
+      }
+      this.log.debug(`Could not pre-check file limits: ${e.message}`);
     }
 
     const headers = {
@@ -1617,10 +1708,7 @@ class Ntfy extends utils.Adapter {
       }
       if (error.response) {
         const status = error.response.status;
-        const data =
-          typeof error.response.data === "string"
-            ? error.response.data
-            : JSON.stringify(error.response.data);
+        const data = this.formatErrorResponse(error.response.data);
         throw new Error(`ntfy server returned HTTP ${status}: ${data}`, {
           cause: error,
         });
@@ -1688,10 +1776,7 @@ class Ntfy extends utils.Adapter {
       );
       if (error.response) {
         const status = error.response.status;
-        const data =
-          typeof error.response.data === "string"
-            ? error.response.data
-            : JSON.stringify(error.response.data);
+        const data = this.formatErrorResponse(error.response.data);
         throw new Error(
           `Failed to dismiss notification: HTTP ${status}: ${data}`,
           { cause: error },
@@ -1755,10 +1840,7 @@ class Ntfy extends utils.Adapter {
       );
       if (error.response) {
         const status = error.response.status;
-        const data =
-          typeof error.response.data === "string"
-            ? error.response.data
-            : JSON.stringify(error.response.data);
+        const data = this.formatErrorResponse(error.response.data);
         throw new Error(
           `Failed to delete notification: HTTP ${status}: ${data}`,
           { cause: error },
