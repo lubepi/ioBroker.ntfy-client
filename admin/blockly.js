@@ -1510,6 +1510,8 @@ if (typeof Blockly !== "undefined") {
     let logParts = [];
     if (value_topic && value_topic !== "''" && value_topic !== '""') {
       logParts.push(`'topic: ' + ${value_topic}`);
+    } else {
+      logParts.push("'topic: (standard)'");
     }
     if (
       value_sequence_id &&
@@ -1623,9 +1625,18 @@ if (typeof Blockly !== "undefined") {
 
     let logCode = "";
     if (dropdown_log) {
-      const logParts = args.length
-        ? args.map((a) => `'${a.attr}: ' + ${a.val}`).join(' + ", " + ')
-        : '"[no args]"';
+      const logArgs = [...args];
+      // Check for message and topic placeholders
+      if (!logArgs.find((a) => a.attr === "message")) {
+        logArgs.unshift({ attr: "message", val: "'(triggered)'" });
+      }
+      if (!logArgs.find((a) => a.attr === "topic")) {
+        logArgs.unshift({ attr: "topic", val: "'(standard)'" });
+      }
+
+      const logParts = logArgs
+        .map((a) => `'${a.attr}: ' + ${a.val}`)
+        .join(' + ", " + ');
       logCode = `console.${dropdown_log}('[' + ${instance} + '] send: ' + ${logParts});\n`;
     }
 
