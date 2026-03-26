@@ -1507,9 +1507,24 @@ if (typeof Blockly !== "undefined") {
     objArr.push(`topic: ${value_topic}`);
     objArr.push(`sequence_id: ${value_sequence_id}`);
 
+    let logParts = [];
+    if (value_topic && value_topic !== "''" && value_topic !== '""') {
+      logParts.push("'topic: ' + " + value_topic);
+    }
+    if (
+      value_sequence_id &&
+      value_sequence_id !== "''" &&
+      value_sequence_id !== '""'
+    ) {
+      logParts.push("'sequence_id: ' + " + value_sequence_id);
+    }
+
     let logCode = "";
     if (dropdown_log) {
-      logCode = `console.${dropdown_log}('[' + ${instance} + '] ${dropdown_action}: topic: ' + ${value_topic} + ', sequence_id: ' + ${value_sequence_id});\n`;
+      const logStr = logParts.length
+        ? logParts.join(' + ", " + ')
+        : '"[no args]"';
+      logCode = `console.${dropdown_log}('[' + ${instance} + '] ${dropdown_action}: ' + ${logStr});\n`;
     }
 
     if (statement) {
