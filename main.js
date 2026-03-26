@@ -2,8 +2,8 @@
 
 const utils = require("@iobroker/adapter-core");
 const axios = require("axios");
-const fs = require("fs");
-const path = require("path");
+const fs = require("node:fs");
+const path = require("node:path");
 const { EventSource } = require("eventsource");
 
 class Ntfy extends utils.Adapter {
