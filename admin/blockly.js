@@ -410,6 +410,99 @@ if (typeof Blockly !== "undefined") {
     "zh-cn": "模板",
   };
 
+  Blockly.Words["with_results"] = {
+    en: "with results",
+    de: "mit Ergebnissen",
+    ru: "с результатами",
+    pt: "com resultados",
+    nl: "met resultaten",
+    fr: "avec résultats",
+    it: "con risultati",
+    es: "con resultados",
+    pl: "z wynikami",
+    uk: "з результатами",
+    "zh-cn": "带有结果",
+  };
+
+  Blockly.Words["loglevel"] = {
+    en: "log level",
+    de: "Loglevel",
+    ru: "Уровень логирования",
+    pt: "Nível de log",
+    nl: "Logniveau",
+    fr: "Niveau de journalisation",
+    it: "Livello log",
+    es: "Nivel de log",
+    pl: "Poziom logowania",
+    uk: "Рівень логування",
+    "zh-cn": "日志级别",
+  };
+  Blockly.Words["loglevel_none"] = {
+    en: "none",
+    de: "keines",
+    ru: "нет",
+    pt: "nenhum",
+    nl: "geen",
+    fr: "aucun",
+    it: "nessuno",
+    es: "ninguno",
+    pl: "brak",
+    uk: "немає",
+    "zh-cn": "无",
+  };
+  Blockly.Words["loglevel_debug"] = {
+    en: "debug",
+    de: "debug",
+    ru: "debug",
+    pt: "debug",
+    nl: "debug",
+    fr: "debug",
+    it: "debug",
+    es: "debug",
+    pl: "debug",
+    uk: "debug",
+    "zh-cn": "debug",
+  };
+  Blockly.Words["loglevel_info"] = {
+    en: "info",
+    de: "info",
+    ru: "info",
+    pt: "info",
+    nl: "info",
+    fr: "info",
+    it: "info",
+    es: "info",
+    pl: "info",
+    uk: "info",
+    "zh-cn": "info",
+  };
+  Blockly.Words["loglevel_warn"] = {
+    en: "warn",
+    de: "warn",
+    ru: "warn",
+    pt: "warn",
+    nl: "warn",
+    fr: "warn",
+    it: "warn",
+    es: "warn",
+    pl: "warn",
+    uk: "warn",
+    "zh-cn": "warn",
+  };
+  Blockly.Words["loglevel_error"] = {
+    en: "error",
+    de: "error",
+    ru: "error",
+    pt: "error",
+    nl: "error",
+    fr: "error",
+    it: "error",
+    es: "error",
+    pl: "error",
+    uk: "error",
+    "zh-cn": "error",
+  };
+
   Blockly.Words["ntfy_mutator_arguments"] = {
     en: "Options",
     de: "Optionen",
@@ -574,6 +667,30 @@ if (typeof Blockly !== "undefined") {
           "INSTANCE",
         );
 
+      this.appendDummyInput("LOG")
+        .appendField(Blockly.Words["loglevel"][systemLang])
+        .appendField(
+          new Blockly.FieldDropdown([
+            [Blockly.Words["loglevel_none"][systemLang], ""],
+            [Blockly.Words["loglevel_debug"][systemLang], "debug"],
+            [Blockly.Words["loglevel_info"][systemLang], "info"],
+            [Blockly.Words["loglevel_warn"][systemLang], "warn"],
+            [Blockly.Words["loglevel_error"][systemLang], "error"],
+          ]),
+          "LOG",
+        );
+
+      this.appendDummyInput("WITH_STATEMENT")
+        .appendField(Blockly.Words["with_results"][systemLang])
+        .appendField(
+          new Blockly.FieldCheckbox("FALSE", function (option) {
+            const withStatement =
+              option === true || option === "true" || option === "TRUE";
+            this.sourceBlock_.updateShape_(withStatement);
+          }),
+          "WITH_STATEMENT",
+        );
+
       // Set initial attributes
       this.attributes_ = ["message", "topic", "title", "priority"];
 
@@ -591,13 +708,26 @@ if (typeof Blockly !== "undefined") {
     mutationToDom: function () {
       const container = Blockly.utils.xml.createElement("mutation");
       container.setAttribute("items", this.attributes_.join(","));
+      const withStatement = this.getFieldValue("WITH_STATEMENT");
+      container.setAttribute(
+        "with_statement",
+        withStatement === true ||
+          withStatement === "true" ||
+          withStatement === "TRUE",
+      );
       return container;
     },
 
     domToMutation: function (xmlElement) {
       const items = xmlElement.getAttribute("items");
       this.attributes_ = items ? items.split(",") : [];
-      this.updateShape_();
+      let withStatement = xmlElement.getAttribute("with_statement");
+      withStatement =
+        withStatement === true ||
+        withStatement === "true" ||
+        withStatement === "TRUE";
+      this.setFieldValue(withStatement ? "TRUE" : "FALSE", "WITH_STATEMENT");
+      this.updateShape_(withStatement);
       this.updateMutator_();
     },
 
@@ -1088,7 +1218,7 @@ if (typeof Blockly !== "undefined") {
       }
     },
 
-    updateShape_: function () {
+    updateShape_: function (withStatement) {
       // 1. Delete all dynamic inputs that are NO LONGER in the attributes_ array
       const allPossibleKeys = ntfyMutatorOptions.map((o) => o.key);
       for (const key of allPossibleKeys) {
@@ -1172,6 +1302,37 @@ if (typeof Blockly !== "undefined") {
           }
         }
       }
+
+      // Move LOG and WITH_STATEMENT to the end to keep them fixed at the bottom
+      if (typeof this.moveInputBefore === "function") {
+        try {
+          this.moveInputBefore("LOG", null);
+          this.moveInputBefore("WITH_STATEMENT", null);
+        } catch (e) {
+          // ignore
+        }
+      }
+
+      if (withStatement === undefined) {
+        withStatement = this.getFieldValue("WITH_STATEMENT");
+        withStatement =
+          withStatement === true ||
+          withStatement === "true" ||
+          withStatement === "TRUE";
+      }
+
+      try {
+        if (this.getInput("STATEMENT")) {
+          this.removeInput("STATEMENT");
+        }
+      } catch (e) {
+        // if the input does not exist, it means that the block was deleted
+      }
+
+      // Add or remove a statement Input.
+      if (withStatement) {
+        this.appendStatementInput("STATEMENT");
+      }
     },
   };
 
@@ -1215,6 +1376,19 @@ if (typeof Blockly !== "undefined") {
           "ACTION",
         );
 
+      this.appendDummyInput("LOG")
+        .appendField(Blockly.Words["loglevel"][systemLang])
+        .appendField(
+          new Blockly.FieldDropdown([
+            [Blockly.Words["loglevel_none"][systemLang], ""],
+            [Blockly.Words["loglevel_debug"][systemLang], "debug"],
+            [Blockly.Words["loglevel_info"][systemLang], "info"],
+            [Blockly.Words["loglevel_warn"][systemLang], "warn"],
+            [Blockly.Words["loglevel_error"][systemLang], "error"],
+          ]),
+          "LOG",
+        );
+
       this.appendValueInput("TOPIC")
         .setCheck("String")
         .appendField(Blockly.Words["ntfy_topic"][systemLang]);
@@ -1222,6 +1396,17 @@ if (typeof Blockly !== "undefined") {
       this.appendValueInput("SEQUENCE_ID")
         .setCheck("String")
         .appendField(Blockly.Words["ntfy_sequence_id"][systemLang]);
+
+      this.appendDummyInput("WITH_STATEMENT")
+        .appendField(Blockly.Words["with_results"][systemLang])
+        .appendField(
+          new Blockly.FieldCheckbox("FALSE", function (option) {
+            const withStatement =
+              option === true || option === "true" || option === "TRUE";
+            this.sourceBlock_.updateShape_(withStatement);
+          }),
+          "WITH_STATEMENT",
+        );
 
       this.setInputsInline(false);
       this.setPreviousStatement(true, null);
@@ -1232,11 +1417,67 @@ if (typeof Blockly !== "undefined") {
         "https://ntfy.sh/docs/publish/#updating-deleting-notifications",
       );
     },
+
+    mutationToDom: function () {
+      const container = Blockly.utils.xml.createElement("mutation");
+      const withStatement = this.getFieldValue("WITH_STATEMENT");
+      container.setAttribute(
+        "with_statement",
+        withStatement === true ||
+          withStatement === "true" ||
+          withStatement === "TRUE",
+      );
+      return container;
+    },
+
+    domToMutation: function (xmlElement) {
+      let withStatement = xmlElement.getAttribute("with_statement");
+      withStatement =
+        withStatement === true ||
+        withStatement === "true" ||
+        withStatement === "TRUE";
+      this.setFieldValue(withStatement ? "TRUE" : "FALSE", "WITH_STATEMENT");
+      this.updateShape_(withStatement);
+    },
+
+    updateShape_: function (withStatement) {
+      if (withStatement === undefined) {
+        withStatement = this.getFieldValue("WITH_STATEMENT");
+        withStatement =
+          withStatement === true ||
+          withStatement === "true" ||
+          withStatement === "TRUE";
+      }
+
+      // Move LOG and WITH_STATEMENT to the end to keep them fixed at the bottom
+      if (typeof this.moveInputBefore === "function") {
+        try {
+          this.moveInputBefore("LOG", null);
+          this.moveInputBefore("WITH_STATEMENT", null);
+        } catch (e) {
+          // ignore
+        }
+      }
+
+      try {
+        if (this.getInput("STATEMENT")) {
+          this.removeInput("STATEMENT");
+        }
+      } catch (e) {
+        // ignore
+      }
+
+      // Add or remove a statement Input.
+      if (withStatement) {
+        this.appendStatementInput("STATEMENT");
+      }
+    },
   };
 
   Blockly.JavaScript["ntfy_manage"] = function (block) {
     var dropdown_instance = block.getFieldValue("INSTANCE");
     var dropdown_action = block.getFieldValue("ACTION");
+    var dropdown_log = block.getFieldValue("LOG");
     var value_topic = Blockly.JavaScript.valueToCode(
       block,
       "TOPIC",
@@ -1247,6 +1488,16 @@ if (typeof Blockly !== "undefined") {
       "SEQUENCE_ID",
       Blockly.JavaScript.ORDER_ATOMIC,
     );
+    var fWithStatement = block.getFieldValue("WITH_STATEMENT");
+
+    let statement = "";
+    if (
+      fWithStatement === true ||
+      fWithStatement === "true" ||
+      fWithStatement === "TRUE"
+    ) {
+      statement = Blockly.JavaScript.statementToCode(block, "STATEMENT");
+    }
 
     var instance = dropdown_instance
       ? `"${dropdown_instance}"`
@@ -1256,15 +1507,36 @@ if (typeof Blockly !== "undefined") {
     objArr.push(`topic: ${value_topic}`);
     objArr.push(`sequence_id: ${value_sequence_id}`);
 
-    var code = `sendTo(${instance}, "${dropdown_action}", {\n  ${objArr.join(",\n  ")}\n});\n`;
-    return code;
+    let logCode = "";
+    if (dropdown_log) {
+      logCode = `console.${dropdown_log}('sendTo[${dropdown_action}] ' + ${instance} + ' [' + ${value_topic} + ']: ' + ${value_sequence_id});\n`;
+    }
+
+    if (statement) {
+      return `${logCode}sendTo(${instance}, "${dropdown_action}", {\n  ${objArr.join(",\n  ")}\n}, async (result) => {\n${
+        statement
+      }});\n`;
+    }
+    return `${logCode}sendTo(${instance}, "${dropdown_action}", {\n  ${objArr.join(",\n  ")}\n});\n`;
   };
 
   Blockly.JavaScript["ntfy"] = function (block) {
     const dropdown_instance = block.getFieldValue("INSTANCE");
+    const dropdown_log = block.getFieldValue("LOG");
     const instance = dropdown_instance
       ? `"${dropdown_instance}"`
       : '"ntfy-client.0"';
+    const fWithStatement = block.getFieldValue("WITH_STATEMENT");
+
+    let statement = "";
+    if (
+      fWithStatement === true ||
+      fWithStatement === "true" ||
+      fWithStatement === "TRUE"
+    ) {
+      statement = Blockly.JavaScript.statementToCode(block, "STATEMENT");
+    }
+
     const args = [];
 
     // Gather all dynamic mutator fields
@@ -1334,6 +1606,16 @@ if (typeof Blockly !== "undefined") {
           .join("\n")
       : "";
 
-    return `sendTo(${instance}, "send", {\n${argStr}\n});\n`;
+    let logCode = "";
+    if (dropdown_log) {
+      logCode = `console.${dropdown_log}('sendTo[send] ' + ${instance} + ': ' + ${args.find((a) => a.attr === "message")?.val || '"[no message]"'});\n`;
+    }
+
+    if (statement) {
+      return `${logCode}sendTo(${instance}, "send", {\n${argStr}\n}, async (result) => {\n${
+        statement
+      }});\n`;
+    }
+    return `${logCode}sendTo(${instance}, "send", {\n${argStr}\n});\n`;
   };
 }
