@@ -1509,7 +1509,7 @@ if (typeof Blockly !== "undefined") {
 
     let logCode = "";
     if (dropdown_log) {
-      logCode = `console.${dropdown_log}('sendTo[${dropdown_action}] ' + ${instance} + ' [' + ${value_topic} + ']: ' + ${value_sequence_id});\n`;
+      logCode = `console.${dropdown_log}('[' + ${instance} + '] ${dropdown_action}: topic: ' + ${value_topic} + ', sequence_id: ' + ${value_sequence_id});\n`;
     }
 
     if (statement) {
@@ -1608,7 +1608,10 @@ if (typeof Blockly !== "undefined") {
 
     let logCode = "";
     if (dropdown_log) {
-      logCode = `console.${dropdown_log}('sendTo[send] ' + ${instance} + ': ' + ${args.find((a) => a.attr === "message")?.val || '"[no message]"'});\n`;
+      const logParts = args.length
+        ? args.map((a) => `'${a.attr}: ' + ${a.val}`).join(' + ", " + ')
+        : '"[no args]"';
+      logCode = `console.${dropdown_log}('[' + ${instance} + '] send: ' + ${logParts});\n`;
     }
 
     if (statement) {
