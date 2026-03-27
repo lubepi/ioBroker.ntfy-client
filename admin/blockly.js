@@ -1526,7 +1526,7 @@ if (typeof Blockly !== "undefined") {
       const logStr = logParts.length
         ? logParts.join(' + ", " + ')
         : '"[no args]"';
-      logCode = `console.${dropdown_log}('[' + ${instance} + '] ${dropdown_action}: ' + ${logStr});\n`;
+      logCode = `console.${dropdown_log}('[' + ${instance} + '] ${dropdown_action}(' + ${logStr} + ')');\n`;
     }
 
     if (statement) {
@@ -1637,7 +1637,7 @@ if (typeof Blockly !== "undefined") {
       const logParts = logArgs
         .map((a) => `'${a.attr}: ' + ${a.val}`)
         .join(' + ", " + ');
-      logCode = `console.${dropdown_log}('[' + ${instance} + '] send: ' + ${logParts});\n`;
+      logCode = `console.${dropdown_log}('[' + ${instance} + '] send(' + ${logParts} + ')');\n`;
     }
 
     if (statement) {
