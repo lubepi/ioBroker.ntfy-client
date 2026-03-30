@@ -49,7 +49,8 @@ Send and receive notifications via [ntfy.sh](https://ntfy.sh) directly from ioBr
 | `cache` | Set to `no` to disable server-side caching |
 | `firebase` | Set to `no` to disable forwarding to Firebase Cloud Messaging (Android) |
 | `unified_push` | Set to `1` to enable UnifiedPush support |
-| `template` | Set to `yes` to use server-side templates (message body must be JSON!) |
+| `template` | Use `true`/`yes` for inline templates, or a name like `github` for predefined ones |
+| `data` | JSON data object or string to be used for the template context |
 
 > **Note:** Each notification receives a unique `message_id` from the server. When no `sequence_id` is provided, the `sequence_id` defaults to the `message_id`. Multiple messages can share the same `sequence_id` to form a sequence — only the latest message in a sequence is displayed.
 
@@ -176,18 +177,33 @@ sendTo('ntfy-client.0', 'send', {
 });
 ```
 
-#### Send with template
-Use the `message` field as your template and provide the JSON data in the `data` field:
+#### Send with template (Inline / Manual)
+Use the `message` field as your template string and provide the JSON context in the `data` field:
 ```javascript
 sendTo('ntfy-client.0', 'send', {
-    message: 'Temperature is {{.temp}}°C from {{.sensor}}',
-    data: { temp: 42, sensor: 'living_room' },
     topic: 'home_alerts_xyz',
-    template: true
+    template: true,
+    message: 'Current temperature is {{.temp}}°C from {{.sensor}}',
+    data: { temp: 42, sensor: 'living_room' }
 });
 ```
 
-> **Tip:** You can also template the title, click URL, and other parameters. If you only provide `message` but no `data`, the `message` is treated as the raw JSON body for the template.
+#### Send with template (Predefined / e.g. GitHub)
+For predefined templates like `github`, you don't need a template string. Simply provide the required JSON data in the `data` field:
+```javascript
+sendTo('ntfy-client.0', 'send', {
+    topic: 'github_webhooks',
+    template: 'github',
+    data: { 
+        action: "opened",
+        issue: { title: "New bug reported", number: 123 },
+        repository: { full_name: "my/repo" },
+        sender: { login: "antigravity" }
+    }
+});
+```
+
+> **Tip:** You can also template the title, click URL, and other parameters. Using the `data` field for your JSON payload is the recommended way for all template types.
 
 #### Dismiss a notification
 ```javascript
