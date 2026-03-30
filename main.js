@@ -1232,6 +1232,8 @@ class Ntfy extends utils.Adapter {
     let firebase = "";
     let unifiedPush = "";
     let template = "";
+    let jsonData = "";
+
 
     if (typeof msgObj === "string") {
       text = msgObj;
@@ -1256,6 +1258,7 @@ class Ntfy extends utils.Adapter {
       firebase = msgObj.firebase;
       unifiedPush = msgObj.unified_push || msgObj.unifiedPush;
       template = msgObj.template;
+      jsonData = msgObj.data || msgObj.json || "";
     }
 
     // Use default topic from config if not specified
@@ -1299,7 +1302,9 @@ class Ntfy extends utils.Adapter {
         unifiedPush,
         template,
         attachFile,
+        jsonData,
       );
+    }
     }
 
     const endpoint = `${url}/${encodeURIComponent(topic)}`;
@@ -1374,6 +1379,15 @@ class Ntfy extends utils.Adapter {
           ? "yes"
           : template;
       requestUrl += `${requestUrl.includes("?") ? "&" : "?"}tpl=${tplVal}`;
+
+      // If separate data is provided, use it as body and message as header template
+      if (jsonData) {
+        if (text) {
+          headers["Message"] = text;
+        }
+        text =
+          typeof jsonData === "object" ? JSON.stringify(jsonData) : jsonData;
+      }
     }
 
     // Apply Authentication
@@ -1523,6 +1537,7 @@ class Ntfy extends utils.Adapter {
     unifiedPush,
     template,
     filePath,
+    jsonData,
   ) {
     this.log.debug(`sendWithFileAttachment called for file: ${filePath}`);
     const endpoint = `${url}/${encodeURIComponent(topic)}`;
@@ -1644,6 +1659,19 @@ class Ntfy extends utils.Adapter {
           ? "yes"
           : template;
       requestUrl += `${requestUrl.includes("?") ? "&" : "?"}tpl=${tplVal}`;
+
+      // If separate data is provided, use it as headers (X-...) for file uploads
+      if (jsonData && typeof jsonData === "object") {
+        for (const [key, value] of Object.entries(jsonData)) {
+          // ntfy uses these as {{.key}}
+          headers[`X-${key}`] =
+            typeof value === "object" ? JSON.stringify(value) : String(value);
+        }
+      } else if (jsonData) {
+        this.log.warn(
+          "jsonData for file attachments with templates must be an object to be sent as headers.",
+        );
+      }
     }
 
     // Apply Authentication

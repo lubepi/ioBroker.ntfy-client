@@ -83,6 +83,19 @@ if (typeof Blockly !== "undefined") {
     uk: "пріоритет",
     "zh-cn": "优先级",
   };
+  Blockly.Words["ntfy_data"] = {
+    en: "JSON data",
+    de: "JSON Daten",
+    ru: "JSON данные",
+    pt: "Dados JSON",
+    nl: "JSON gegevens",
+    fr: "données JSON",
+    it: "dati JSON",
+    es: "datos JSON",
+    pl: "dane JSON",
+    uk: "JSON дані",
+    "zh-cn": "JSON 数据",
+  };
   Blockly.Words["ntfy_priority_default"] = {
     en: "default",
     de: "Standard",
@@ -587,6 +600,7 @@ if (typeof Blockly !== "undefined") {
     { key: "email", word: "ntfy_email" },
     { key: "call", word: "ntfy_call" },
     { key: "template", word: "ntfy_template" },
+    { key: "data", word: "ntfy_data" },
     { key: "cache", word: "ntfy_cache" },
     { key: "firebase", word: "ntfy_firebase" },
     { key: "unified_push", word: "ntfy_unifiedpush" },

@@ -176,15 +176,18 @@ sendTo('ntfy-client.0', 'send', {
 });
 ```
 
-#### Send with template (JSON body)
+#### Send with template
+Use the `message` field as your template and provide the JSON data in the `data` field:
 ```javascript
 sendTo('ntfy-client.0', 'send', {
-    message: '{"temperature": 42, "sensor": "living_room"}',
+    message: 'Temperature is {{.temp}}°C from {{.sensor}}',
+    data: { temp: 42, sensor: 'living_room' },
     topic: 'home_alerts_xyz',
-    title: 'Temp: {{.temperature}}°C from {{.sensor}}',
     template: true
 });
 ```
+
+> **Tip:** You can also template the title, click URL, and other parameters. If you only provide `message` but no `data`, the `message` is treated as the raw JSON body (current behavior for backward compatibility).
 
 #### Dismiss a notification
 ```javascript
