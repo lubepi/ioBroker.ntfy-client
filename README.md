@@ -187,7 +187,7 @@ sendTo('ntfy-client.0', 'send', {
 });
 ```
 
-> **Tip:** You can also template the title, click URL, and other parameters. If you only provide `message` but no `data`, the `message` is treated as the raw JSON body (current behavior for backward compatibility).
+> **Tip:** You can also template the title, click URL, and other parameters. If you only provide `message` but no `data`, the `message` is treated as the raw JSON body for the template.
 
 #### Dismiss a notification
 ```javascript

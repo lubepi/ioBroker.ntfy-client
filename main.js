@@ -1244,20 +1244,20 @@ class Ntfy extends utils.Adapter {
       tags = msgObj.tags || "";
       click = msgObj.click || "";
       attach = msgObj.attach || "";
-      attachFile = msgObj.attach_file || msgObj.attachFile || "";
+      attachFile = msgObj.attach_file || "";
       filename = msgObj.filename || "";
-      actions = msgObj.actions || msgObj.action || "";
+      actions = msgObj.actions || "";
       markdown = !!msgObj.markdown;
       delay = msgObj.delay || "";
       email = msgObj.email || "";
       call = msgObj.call || "";
       icon = msgObj.icon || "";
-      sequenceId = msgObj.sequence_id || msgObj.sequenceId || "";
+      sequenceId = msgObj.sequence_id || "";
       cache = msgObj.cache;
       firebase = msgObj.firebase;
-      unifiedPush = msgObj.unified_push || msgObj.unifiedPush;
+      unifiedPush = msgObj.unified_push;
       template = msgObj.template;
-      jsonData = msgObj.data || msgObj.json || "";
+      jsonData = msgObj.data || "";
     }
 
     // Use default topic from config if not specified
@@ -1449,12 +1449,6 @@ class Ntfy extends utils.Adapter {
       this.log.debug(
         `Sending notification to topic "${topic}" (${debugParams.join(", ")})`,
       );
-      // Ensure body is a string to prevent axios from auto-setting "Content-Type: application/json"
-      // ntfy would then expect a ntfy-formatted record instead of raw template data.
-      if (typeof text === "object" && text !== null) {
-        text = JSON.stringify(text);
-      }
-
       this.log.debug(
         `POST request to ${requestUrl} with headers: ${JSON.stringify(headers)}`,
       );
@@ -1791,7 +1785,7 @@ class Ntfy extends utils.Adapter {
 
     if (typeof msgObj === "object") {
       topic = msgObj.topic || "";
-      sequenceId = msgObj.sequence_id || msgObj.sequenceId || "";
+      sequenceId = msgObj.sequence_id || "";
     }
 
     if (!topic) {
@@ -1855,7 +1849,7 @@ class Ntfy extends utils.Adapter {
 
     if (typeof msgObj === "object") {
       topic = msgObj.topic || "";
-      sequenceId = msgObj.sequence_id || msgObj.sequenceId || "";
+      sequenceId = msgObj.sequence_id || "";
     }
 
     if (!topic) {
