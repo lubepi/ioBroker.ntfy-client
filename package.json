@@ -24,7 +24,6 @@
   },
   "files": [
     "admin{,/!(src)/**}/*",
-    "lib/",
     "io-package.json",
     "LICENSE",
     "main.js"

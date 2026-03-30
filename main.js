@@ -61,8 +61,7 @@ class Ntfy extends utils.Adapter {
     await this.createObjectStructure();
     this.log.debug("Object structure created successfully.");
 
-    // Set connection state to true initially
-    await this.setStateAsync("info.connection", true, true);
+    // Connection state will be set by checkServerVersion() based on actual health check result
 
     // Subscribe to configured topics
     this.log.debug("Cleaning up orphaned topics...");
@@ -804,17 +803,15 @@ class Ntfy extends utils.Adapter {
       true,
     );
     await this.setStateAsync(
-      `topics.${safeName}.lastExpires`,
-      data.expires ? data.expires * 1000 : 0,
-      true,
-    );
-    await this.setStateAsync(
       `topics.${safeName}.lastJson`,
       JSON.stringify(data),
       true,
     );
   }
 
+  /**
+   * Fetch account statistics from the ntfy server.
+   */
   async fetchAccountStats() {
     this.log.debug("Triggering account statistics update...");
     const url = (this.config.url || "https://ntfy.sh").replace(/\/+$/, "");
@@ -979,7 +976,9 @@ class Ntfy extends utils.Adapter {
       } else if (error.response && error.response.status === 404) {
         this.log.debug("Account stats endpoint not available on this server.");
       } else {
-        this.log.warn(`Failed to fetch account statistics: ${error.message || "Unknown error"}`);
+        this.log.warn(
+          `Failed to fetch account statistics: ${error.message || "Unknown error"}`,
+        );
       }
     }
   }
@@ -989,7 +988,6 @@ class Ntfy extends utils.Adapter {
    */
   async checkServerVersion() {
     this.log.debug("Triggering server version and update check...");
-    this.log.debug("Starting server version check...");
     const url = (this.config.url || "https://ntfy.sh").replace(/\/+$/, "");
     const authHeaders = this.getAuthHeaders();
 

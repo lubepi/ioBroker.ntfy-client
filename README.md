@@ -19,7 +19,7 @@ Send and receive notifications via [ntfy.sh](https://ntfy.sh) directly from ioBr
 * **Subscribe to topics** and receive messages in real-time via SSE (Server-Sent Events)
 * **Account statistics** – view usage stats (messages, emails, calls, attachments, reservations)
 * **Server version check** – detect available updates for self-hosted ntfy instances
-* **Connection status** – monitor the adapter's connection to the ntfy server
+* **Connection status** – monitor the adapter's connection to the ntfy server with dynamic health checks
 * Basic authentication and bearer token support
 * Custom server URLs (or the standard ntfy.sh instance)
 * **Integrated `sendTo` Blockly blocks** for graphic scripts (send and manage)
@@ -45,12 +45,13 @@ Send and receive notifications via [ntfy.sh](https://ntfy.sh) directly from ioBr
 | `email` | Forward notification to this email address |
 | `call` | Phone number to call with TTS (requires ntfy Pro) |
 | `icon` | Icon URL displayed next to the notification |
-| `sequence_id` | `Sequence-ID` | **Replace/Update** existing notification with the same ID |
-| `message_id` | `Message-ID` | **Deduplication**: ignore duplicate messages with the same ID (server-side) |
-| `cache` | `Cache` | Set to `no` to disable server-side caching |
-| `firebase` | `Firebase` | Set to `no` to disable forwarding to Firebase Cloud Messaging (Android) |
-| `unified_push`| `UnifiedPush` | Set to `1` to enable UnifiedPush support |
-| `template` | `tpl` | Set to `yes` to use server-side templates |
+| `sequence_id` | Replace/update an existing notification with the same Sequence-ID |
+| `cache` | Set to `no` to disable server-side caching |
+| `firebase` | Set to `no` to disable forwarding to Firebase Cloud Messaging (Android) |
+| `unified_push` | Set to `1` to enable UnifiedPush support |
+| `template` | Set to `yes` to use server-side templates (message body must be JSON!) |
+
+> **Note:** Each notification receives a unique `message_id` from the server. When no `sequence_id` is provided, the `sequence_id` defaults to the `message_id`. Multiple messages can share the same `sequence_id` to form a sequence — only the latest message in a sequence is displayed.
 
 ### Topic Subscription (Receive Messages)
 
@@ -63,9 +64,18 @@ Configure topics in the adapter settings under the **Topics** tab. The adapter s
 | `lastPriority` | Last received priority |
 | `lastTags` | Last received tags (comma-separated) |
 | `lastClick` | Last received click URL |
+| `lastIcon` | Last received icon URL |
+| `lastActions` | Last received actions (JSON) |
 | `lastAttachmentUrl` | Last received attachment URL |
+| `lastAttachmentName` | Last received attachment name |
+| `lastAttachmentType` | Last received attachment MIME type |
+| `lastAttachmentSize` | Last received attachment size (bytes) |
+| `lastAttachmentExpires` | Last received attachment expiry timestamp |
 | `lastTimestamp` | Last message timestamp |
+| `lastExpires` | Last message expiry timestamp |
 | `lastMessageId` | Last message ID |
+| `lastTopic` | Last received topic name |
+| `lastEvent` | Last received event type |
 | `lastJson` | Full JSON of last received message |
 | `subscribed` | Whether the subscription is active |
 
@@ -80,34 +90,43 @@ When authentication is configured, the adapter fetches account statistics every 
 * **Attachments**: storage used/remaining/limit, expiry duration, file size limit, bandwidth limit
 * **Account**: subscription tier
 
-### Server Version Check
+### Connection Status & Health Checks
 
-For self-hosted instances, the adapter checks the server version and compares it with the latest GitHub release:
+The adapter monitors the connection to the ntfy server via the `info.connection` state:
 
 | State | Description |
 |-------|-------------|
-| `info.serverVersion` | Current ntfy server version |
-| `info.latestVersion` | Latest available version |
-| `info.updateAvailable` | Whether an update is available |
 | `info.connection` | Connection status to the ntfy server |
+| `info.serverVersion` | Current ntfy server version |
+| `info.latestVersion` | Latest available version (self-hosted only) |
+| `info.updateAvailable` | Whether a server update is available |
+
+The health check runs against the `/v1/health` endpoint with **dynamic intervals**:
+* **Every 6 hours** when the server is healthy
+* **Every 5 minutes** when the last check failed (for faster recovery)
+
+Additionally, the connection status is automatically set to **connected** when:
+* A notification is successfully sent
+* An SSE subscription connects successfully
+* A message is received on a subscribed topic
 
 ### Blockly Examples
 Under the **Sendto** category, use the following blocks:
 
-#### 1. ntfy (send)
+#### 1. ntfy-client notification (send)
 Dispatch a message with all supported parameters:
 1. Set the **Instance**.
 2. Set the **Message**.
 3. Set the **Topic** (or leave empty to use the default topic).
-... (other parameters)
-8. Use **Sequence ID** if you want to update/overwrite an existing notification later.
+4. Optionally add more parameters via the **mutator** (gear icon): title, priority, tags, icon, click URL, actions, attachments, delay, email, call, etc.
+5. Use **Sequence ID** if you want to update/overwrite an existing notification later.
 
-#### 2. ntfy Verwaltung (manage)
+#### 2. ntfy-client management (manage)
 Clear or delete an existing notification:
 1. Set the **Instance**.
-2. Set the **Aktion** (quittieren/ausblenden or löschen).
+2. Set the **Action** (mark as read and dismiss, or delete).
 3. Set the **Topic**.
-4. Set the **Sequenz-ID** of the message you want to manage.
+4. Set the **Sequence ID** of the message you want to manage.
 
 ### JavaScript Examples
 
@@ -157,6 +176,16 @@ sendTo('ntfy-client.0', 'send', {
 });
 ```
 
+#### Send with template (JSON body)
+```javascript
+sendTo('ntfy-client.0', 'send', {
+    message: '{"temperature": 42, "sensor": "living_room"}',
+    topic: 'home_alerts_xyz',
+    title: 'Temp: {{.temperature}}°C from {{.sensor}}',
+    template: true
+});
+```
+
 #### Dismiss a notification
 ```javascript
 sendTo('ntfy-client.0', 'dismiss', {
@@ -188,27 +217,17 @@ Ntfy supports a few variations:
 | `delete` | Delete a notification by sequence_id |
 
 ## Changelog
-### 0.3.0 (2026-03-19)
-* (lubepi) Added missing publishing features: Deduplication (`message_id`), Cache control, Firebase/UnifiedPush support, and Templates
-
-### 0.2.1 (2026-03-18)
-* (lubepi) Corrected `sequence_id` mapping to use `Sequence-ID` (enables message replacement/overwriting)
-* (lubepi) Added new Blockly management block to clear or delete notifications by sequence ID
-* (lubepi) Updated blockly tooltips and documentation
-
-### 0.2.0 (2026-03-18)
-* (lubepi) Subscribe to topics via SSE (receive messages in real-time)
-* (lubepi) Account statistics (messages, emails, calls, attachments, reservations)
-* (lubepi) Server version check for self-hosted instances
-* (lubepi) Connection status monitoring
-* (lubepi) New parameters: email, call, icon, filename, attach_file, sequence_id
-* (lubepi) Dismiss and delete notifications by sequence_id
-* (lubepi) Default topic configuration
-* (lubepi) Topics configuration tab with subscription management
-* (lubepi) Extended Blockly block with all new parameters
-
-### 0.1.0 (2026-03-16)
-* (lubepi) initial release with full ntfy.sh support
+### 0.1.0
+* (lubepi) Initial release with full ntfy.sh support
+* Subscribe to topics via SSE (receive messages in real-time)
+* Publish notifications with all ntfy parameters (title, priority, tags, click, attach, actions, markdown, delay, email, call, icon, sequence_id, cache, firebase, unified_push, template)
+* File upload attachments via PUT
+* Dismiss and delete notifications by sequence_id
+* Account statistics (messages, emails, calls, attachments, reservations)
+* Server version check for self-hosted instances
+* Dynamic connection status monitoring with health checks
+* Blockly blocks for sending and managing notifications
+* Full i18n support (en, de, ru, pt, nl, fr, it, es, pl, uk, zh-cn)
 
 ## License
 MIT License
