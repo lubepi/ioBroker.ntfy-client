@@ -127,7 +127,11 @@ Clear or delete an existing notification:
 3. Set the **Topic**.
 4. Set the **Sequence ID** of the message you want to manage.
 
-> **Note:** Each notification receives a unique `message_id` from the server. If no `sequence_id` was provided during sending, this `message_id` serves as the identifier for all management actions (dismiss/delete). By providing your own `sequence_id`, you can explicitly group or update notifications. Multiple messages sharing the same `sequence_id` form a sequence — only the latest message in a sequence is displayed.
+> **Note on IDs:** Each notification is assigned a unique `id` (Message ID) by the server.
+> * If you **provide** a `sequence_id` when sending, you **must use this `sequence_id`** for all management actions (dismiss, delete).
+> * If you **do not provide** a `sequence_id`, the server-generated `id` serves as the identifier for management.
+>
+> Multiple messages sharing the same `sequence_id` form a sequence — only the latest message in a sequence is displayed.
 
 ### JavaScript Examples
 
