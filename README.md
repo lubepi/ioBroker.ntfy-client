@@ -52,8 +52,6 @@ Send and receive notifications via [ntfy.sh](https://ntfy.sh) directly from ioBr
 | `template` | Use `true`/`yes` for inline templates, or a name like `github` for predefined ones |
 | `data` | JSON data object or string to be used for the template context |
 
-> **Note:** Each notification receives a unique `message_id` from the server. When no `sequence_id` is provided, the `sequence_id` defaults to the `message_id`. Multiple messages can share the same `sequence_id` to form a sequence — only the latest message in a sequence is displayed.
-
 ### Topic Subscription (Receive Messages)
 
 Configure topics in the adapter settings under the **Topics** tab. The adapter subscribes to these topics via SSE and creates states for each topic under `ntfy-client.0.topics.<topicName>`:
@@ -128,6 +126,8 @@ Clear or delete an existing notification:
 2. Set the **Action** (mark as read and dismiss, or delete).
 3. Set the **Topic**.
 4. Set the **Sequence ID** of the message you want to manage.
+
+> **Note:** Each notification receives a unique `message_id` from the server. When no `sequence_id` is provided, ntfy automatically assigns a `message_id`. By providing a custom `sequence_id` when sending, you can update or delete that specific notification later. Multiple messages sharing the same `sequence_id` form a sequence — only the latest message in a sequence is displayed.
 
 ### JavaScript Examples
 
