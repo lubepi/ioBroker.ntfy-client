@@ -1260,6 +1260,12 @@ class Ntfy extends utils.Adapter {
       jsonData = msgObj.data || "";
     }
 
+    // If message is an object (e.g. a JSON payload for templates), stringify it early
+    // to prevent axios from auto-setting "Content-Type: application/json"
+    if (typeof text === "object" && text !== null) {
+      text = JSON.stringify(text);
+    }
+
     // Use default topic from config if not specified
     if (!topic) {
       this.log.debug("No topic specified, using default topic from config...");
