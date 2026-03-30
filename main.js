@@ -375,6 +375,12 @@ class Ntfy extends utils.Adapter {
         role: "text",
       },
       {
+        id: `topics.${safeName}.lastSequenceId`,
+        name: "Last sequence ID",
+        type: "string",
+        role: "text",
+      },
+      {
         id: `topics.${safeName}.lastTopic`,
         name: "Last received topic",
         type: "string",
@@ -753,6 +759,11 @@ class Ntfy extends utils.Adapter {
     await this.setStateAsync(
       `topics.${safeName}.lastMessageId`,
       data.id || "",
+      true,
+    );
+    await this.setStateAsync(
+      `topics.${safeName}.lastSequenceId`,
+      data.sequence_id || "",
       true,
     );
     await this.setStateAsync(
