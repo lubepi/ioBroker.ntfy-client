@@ -1234,7 +1234,6 @@ class Ntfy extends utils.Adapter {
     let template = "";
     let jsonData = "";
 
-
     if (typeof msgObj === "string") {
       text = msgObj;
     } else if (typeof msgObj === "object") {
@@ -1305,7 +1304,6 @@ class Ntfy extends utils.Adapter {
         jsonData,
       );
     }
-    }
 
     const endpoint = `${url}/${encodeURIComponent(topic)}`;
     this.log.debug(`Sending notification to endpoint: ${endpoint}`);
@@ -1371,9 +1369,6 @@ class Ntfy extends utils.Adapter {
       template !== "" &&
       template !== false
     ) {
-      // Set the Content-Type header so the body is properly transmitted and recognized as JSON
-      headers["Content-Type"] = "application/json";
-
       const tplVal =
         template === true || template === "yes" || template === "1"
           ? "yes"
@@ -1454,6 +1449,12 @@ class Ntfy extends utils.Adapter {
       this.log.debug(
         `Sending notification to topic "${topic}" (${debugParams.join(", ")})`,
       );
+      // Ensure body is a string to prevent axios from auto-setting "Content-Type: application/json"
+      // ntfy would then expect a ntfy-formatted record instead of raw template data.
+      if (typeof text === "object" && text !== null) {
+        text = JSON.stringify(text);
+      }
+
       this.log.debug(
         `POST request to ${requestUrl} with headers: ${JSON.stringify(headers)}`,
       );
@@ -1514,6 +1515,7 @@ class Ntfy extends utils.Adapter {
    * @param {string} unifiedPush UnifiedPush control
    * @param {string} template Template control
    * @param {string} filePath Path to the file to attach
+   * @param {string|object} [jsonData] JSON data for templating
    * @returns {Promise<object>} The response data
    */
   async sendWithFileAttachment(
