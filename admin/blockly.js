@@ -305,17 +305,17 @@ if (typeof Blockly !== "undefined") {
     "zh-cn": "图标链接",
   };
   Blockly.Words["ntfy_sequence_id"] = {
-    en: "sequence ID",
-    de: "Sequenz-ID",
-    ru: "ID последовательности",
-    pt: "ID de sequência",
-    nl: "sequentie-ID",
-    fr: "ID de séquence",
-    it: "ID sequenza",
-    es: "ID de secuencia",
-    pl: "ID sekwencji",
-    uk: "ID послідовності",
-    "zh-cn": "序列ID",
+    en: "message / sequence ID",
+    de: "Nachrichten- / Sequenz-ID",
+    ru: "ID сообщения / последовательности",
+    pt: "ID de mensagem / sequência",
+    nl: "bericht / sequentie-ID",
+    fr: "ID de message / séquence",
+    it: "ID messaggio / sequenza",
+    es: "ID de mensaje / secuencia",
+    pl: "ID wiadomości / sekwencji",
+    uk: "ID повідомлення / послідовності",
+    "zh-cn": "消息 / 序列ID",
   };
   Blockly.Words["ntfy_manage"] = {
     en: "ntfy-client management",
