@@ -189,7 +189,7 @@ sendTo('ntfy-client.0', 'send', {
 ```
 
 #### Send with template (Predefined / e.g. GitHub)
-For predefined templates like `github`, provide the original webhook JSON data in the `data` field. The data structure must match the format the original service sends:
+For predefined templates like `github`, provide the original webhook JSON data in the `data` field. The data structure must match what the original service sends ([see template source](https://github.com/binwiederhier/ntfy/blob/main/server/templates/github.yml)):
 ```javascript
 sendTo('ntfy-client.0', 'send', {
     topic: 'github_webhooks',
@@ -197,27 +197,20 @@ sendTo('ntfy-client.0', 'send', {
     data: {
         action: 'opened',
         issue: {
-            number: 1347,
+            number: 42,
             title: 'Found a bug',
-            html_url: 'https://github.com/octocat/Hello-World/issues/1347',
-            user: {
-                login: 'octocat',
-                html_url: 'https://github.com/octocat'
-            }
+            html_url: 'https://github.com/my/repo/issues/42',
+            user: { html_url: 'https://github.com/octocat' }
         },
         repository: {
-            full_name: 'octocat/Hello-World',
-            html_url: 'https://github.com/octocat/Hello-World'
-        },
-        sender: {
-            login: 'octocat',
-            html_url: 'https://github.com/octocat'
+            full_name: 'my/repo',
+            html_url: 'https://github.com/my/repo'
         }
     }
 });
 ```
 
-> **Note:** Predefined templates (e.g. `github`, `pagerduty`) expect the **exact data structure** from the original service. Missing fields will show as `<no value>` in the notification. For full control over formatting, use an inline template (`template: true`) instead.
+> **Note:** Predefined templates expect the **exact data structure** from the original service. Missing or misnamed fields will show as `<no value>`. For full control over formatting, use an inline template (`template: true`) instead.
 
 #### Dismiss a notification
 ```javascript
