@@ -23,7 +23,7 @@ class Ntfy extends utils.Adapter {
 
     this.statsInterval = null;
 
-    this.versionCheckInterval = null;
+    this.versionCheckTimer = null;
   }
 
   /**
@@ -81,15 +81,9 @@ class Ntfy extends utils.Adapter {
       15 * 60 * 1000,
     );
 
-    // Check server version
+    // Check server version (also schedules periodic checks)
     this.log.debug("Checking server version...");
     await this.checkServerVersion();
-
-    // Start periodic version check (every 6 hours)
-    this.versionCheckInterval = this.setInterval(
-      () => this.checkServerVersion(),
-      6 * 60 * 60 * 1000,
-    );
 
     this.log.info("ntfy-client adapter started. Waiting for messages...");
   }
@@ -673,6 +667,7 @@ class Ntfy extends utils.Adapter {
     es.onopen = () => {
       this.log.debug(`SSE connection opened for topic "${topicName}"`);
       this.setStateAsync(`topics.${safeName}.subscribed`, true, true);
+      this.setStateAsync("info.connection", true, true);
     };
 
     es.addEventListener("message", (event) => {
@@ -714,6 +709,9 @@ class Ntfy extends utils.Adapter {
     this.log.debug(
       `Received message on topic "${topicName}": ${JSON.stringify(data)}`,
     );
+
+    // Any incoming message confirms connection is alive
+    await this.setStateAsync("info.connection", true, true);
 
     await this.setStateAsync(
       `topics.${safeName}.lastMessage`,
@@ -981,7 +979,7 @@ class Ntfy extends utils.Adapter {
       } else if (error.response && error.response.status === 404) {
         this.log.debug("Account stats endpoint not available on this server.");
       } else {
-        this.log.warn(`Failed to fetch account statistics: ${error.message}`);
+        this.log.warn(`Failed to fetch account statistics: ${error.message || "Unknown error"}`);
       }
     }
   }
@@ -1012,6 +1010,13 @@ class Ntfy extends utils.Adapter {
         );
         await this.setStateAsync("info.connection", false, true);
       }
+
+      // Schedule next check (6 hours if healthy, 5 minutes if unhealthy)
+      const nextCheckMs =
+        healthResponse.data && healthResponse.data.healthy
+          ? 6 * 60 * 60 * 1000
+          : 5 * 60 * 1000;
+      this.scheduleNextVersionCheck(nextCheckMs);
 
       // Try to get server version (admin-only endpoint)
       try {
@@ -1088,7 +1093,25 @@ class Ntfy extends utils.Adapter {
         this.log.warn(`Server health check failed: ${error.message}`);
       }
       await this.setStateAsync("info.connection", false, true);
+
+      // Schedule next check (5 minutes on failure)
+      this.scheduleNextVersionCheck(5 * 60 * 1000);
     }
+  }
+
+  /**
+   * Schedule the next server version and health check.
+   *
+   * @param {number} ms - Milliseconds until next check
+   */
+  scheduleNextVersionCheck(ms) {
+    if (this.versionCheckTimer) {
+      this.clearTimeout(this.versionCheckTimer);
+    }
+    this.versionCheckTimer = this.setTimeout(
+      () => this.checkServerVersion(),
+      ms,
+    );
   }
 
   /**
@@ -1110,9 +1133,9 @@ class Ntfy extends utils.Adapter {
         this.clearInterval(this.statsInterval);
         this.statsInterval = null;
       }
-      if (this.versionCheckInterval) {
-        this.clearInterval(this.versionCheckInterval);
-        this.versionCheckInterval = null;
+      if (this.versionCheckTimer) {
+        this.clearTimeout(this.versionCheckTimer);
+        this.versionCheckTimer = null;
       }
 
       this.log.info("ntfy-client adapter stopped.");
@@ -1430,7 +1453,8 @@ class Ntfy extends utils.Adapter {
         `Notification successfully sent to topic "${topic}" (HTTP ${response.status})`,
       );
 
-      // Refresh account stats after sending (to update remaining limits/storage)
+      // Refresh account stats and reset connection state after sending
+      await this.setStateAsync("info.connection", true, true);
       await this.fetchAccountStats();
 
       return response.data || {};
@@ -1695,7 +1719,8 @@ class Ntfy extends utils.Adapter {
         `File attachment successfully sent to topic "${topic}" (HTTP ${response.status})`,
       );
 
-      // Refresh account stats after sending (to update remaining limits/storage)
+      // Refresh account stats and reset connection state after sending
+      await this.setStateAsync("info.connection", true, true);
       await this.fetchAccountStats();
 
       return response.data || {};
