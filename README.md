@@ -127,7 +127,7 @@ Clear or delete an existing notification:
 3. Set the **Topic**.
 4. Set the **Sequence ID** of the message you want to manage.
 
-> **Note:** Each notification receives a unique `message_id` from the server. When no `sequence_id` is provided, ntfy automatically assigns a `message_id`. By providing a custom `sequence_id` when sending, you can update or delete that specific notification later. Multiple messages sharing the same `sequence_id` form a sequence — only the latest message in a sequence is displayed.
+> **Note:** Each notification receives a unique `message_id` from the server. If no `sequence_id` was provided during sending, this `message_id` serves as the identifier for all management actions (dismiss/delete). By providing your own `sequence_id`, you can explicitly group or update notifications. Multiple messages sharing the same `sequence_id` form a sequence — only the latest message in a sequence is displayed.
 
 ### JavaScript Examples
 
