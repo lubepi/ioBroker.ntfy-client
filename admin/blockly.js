@@ -1537,8 +1537,6 @@ if (typeof Blockly !== "undefined") {
     var objArr = [];
     objArr.push(`topic: ${value_topic}`);
     objArr.push(`message_or_sequence_id: ${value_id}`);
-    // Backward compatibility for sequence_id
-    objArr.push(`sequence_id: ${value_id}`);
 
     let logParts = [];
     if (value_topic && value_topic !== "''" && value_topic !== '""') {
