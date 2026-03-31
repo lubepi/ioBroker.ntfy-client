@@ -601,13 +601,18 @@ if (typeof Blockly !== "undefined") {
     { key: "call", word: "ntfy_call" },
     { key: "template", word: "ntfy_template" },
     { key: "data", word: "ntfy_data" },
-    { key: "cache", word: "ntfy_cache" },
-    { key: "firebase", word: "ntfy_firebase" },
+    { key: "disable_cache", word: "ntfy_cache" },
+    { key: "disable_firebase", word: "ntfy_firebase" },
     { key: "unified_push", word: "ntfy_unifiedpush" },
     { key: "markdown", word: "ntfy_markdown" },
   ];
 
-  const ntfyBooleanOptions = ["cache", "firebase", "unified_push", "markdown"];
+  const ntfyBooleanOptions = [
+    "disable_cache",
+    "disable_firebase",
+    "unified_push",
+    "markdown",
+  ];
 
   ntfyMutatorOptions.forEach(function (opt) {
     Blockly.Blocks[`ntfy_mutator_${opt.key}`] = {
@@ -1581,10 +1586,6 @@ if (typeof Blockly !== "undefined") {
             ? "true"
             : "false";
 
-        // For cache and firebase we trigger "Disable", so we have to invert the boolean
-        if (attrName === "cache" || attrName === "firebase") {
-          vArgument = vArgument === "true" ? "false" : "true";
-        }
       } else if (attrName === "priority") {
         const prioVal = block.getFieldValue(`FIELD_${attrName}`);
         vArgument = `"${prioVal}"`;
