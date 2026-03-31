@@ -305,6 +305,19 @@ if (typeof Blockly !== "undefined") {
     "zh-cn": "图标链接",
   };
   Blockly.Words["ntfy_sequence_id"] = {
+    en: "sequence ID",
+    de: "Sequenz-ID",
+    ru: "ID последовательности",
+    pt: "ID de sequência",
+    nl: "sequentie-ID",
+    fr: "ID de séquence",
+    it: "ID sequenza",
+    es: "ID de secuencia",
+    pl: "ID sekwencji",
+    uk: "ID послідовності",
+    "zh-cn": "序列ID",
+  };
+  Blockly.Words["ntfy_message_or_sequence_id"] = {
     en: "message / sequence ID",
     de: "Nachrichten- / Sequenz-ID",
     ru: "ID сообщения / последовательности",
@@ -1409,7 +1422,7 @@ if (typeof Blockly !== "undefined") {
 
       this.appendValueInput("MESSAGE_OR_SEQUENCE_ID")
         .setCheck("String")
-        .appendField(Blockly.Words["ntfy_sequence_id"][systemLang]);
+        .appendField(Blockly.Words["ntfy_message_or_sequence_id"][systemLang]);
 
       this.appendDummyInput("WITH_STATEMENT")
         .appendField(Blockly.Words["with_results"][systemLang])
