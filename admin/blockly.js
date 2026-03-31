@@ -1330,11 +1330,14 @@ if (typeof Blockly !== "undefined") {
         }
       }
 
-      // Move LOG and WITH_STATEMENT to the end to keep them fixed at the bottom
+      // Move LOG, WITH_STATEMENT and STATEMENT to the end to keep them fixed at the bottom
       if (typeof this.moveInputBefore === "function") {
         try {
           this.moveInputBefore("LOG", null);
           this.moveInputBefore("WITH_STATEMENT", null);
+          if (this.getInput("STATEMENT")) {
+            this.moveInputBefore("STATEMENT", null);
+          }
         } catch (e) {
           // ignore
         }
@@ -1348,17 +1351,16 @@ if (typeof Blockly !== "undefined") {
           withStatement === "TRUE";
       }
 
-      try {
-        if (this.getInput("STATEMENT")) {
+      // Add or remove a statement Input.
+      const input = this.getInput("STATEMENT");
+      if (withStatement) {
+        if (!input) {
+          this.appendStatementInput("STATEMENT");
+        }
+      } else {
+        if (input) {
           this.removeInput("STATEMENT");
         }
-      } catch (e) {
-        // if the input does not exist, it means that the block was deleted
-      }
-
-      // Add or remove a statement Input.
-      if (withStatement) {
-        this.appendStatementInput("STATEMENT");
       }
     },
   };
@@ -1476,27 +1478,29 @@ if (typeof Blockly !== "undefined") {
           withStatement === "TRUE";
       }
 
-      // Move LOG and WITH_STATEMENT to the end to keep them fixed at the bottom
+      // Move LOG, WITH_STATEMENT and STATEMENT to the end to keep them fixed at the bottom
       if (typeof this.moveInputBefore === "function") {
         try {
           this.moveInputBefore("LOG", null);
           this.moveInputBefore("WITH_STATEMENT", null);
+          if (this.getInput("STATEMENT")) {
+            this.moveInputBefore("STATEMENT", null);
+          }
         } catch (e) {
           // ignore
         }
       }
 
-      try {
-        if (this.getInput("STATEMENT")) {
+      // Add or remove a statement Input.
+      const input = this.getInput("STATEMENT");
+      if (withStatement) {
+        if (!input) {
+          this.appendStatementInput("STATEMENT");
+        }
+      } else {
+        if (input) {
           this.removeInput("STATEMENT");
         }
-      } catch (e) {
-        // ignore
-      }
-
-      // Add or remove a statement Input.
-      if (withStatement) {
-        this.appendStatementInput("STATEMENT");
       }
     },
   };
