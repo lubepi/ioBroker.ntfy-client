@@ -1,6 +1,5 @@
 node_modules/
 .idea/
-.vscode/
 tmp/
 *.tgz
 iob_npm.done
