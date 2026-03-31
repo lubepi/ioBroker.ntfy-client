@@ -10,7 +10,6 @@ Er kombiniert maximale Automatisierung mit einer gezielten manuellen Review-Phas
 ## Voraussetzungen
 
 Bevor du den Workflow startest, stell sicher, dass:
-
 - Alle geplanten Änderungen committed und gepusht sind
 - Du auf dem `main`-Branch bist
 - Das Working Tree sauber ist (`git status`)
@@ -22,7 +21,6 @@ Bevor du den Workflow startest, stell sicher, dass:
 Sage dem Assistenten, dass du einen Release machen möchtest. Er übernimmt dann automatisch:
 
 1. **Änderungen seit dem letzten Tag ermitteln:**
-
 ```bash
 git log $(git describe --tags --abbrev=0)..HEAD --oneline
 ```
@@ -31,19 +29,17 @@ git log $(git describe --tags --abbrev=0)..HEAD --oneline
 
 3. **Repository-Check durchführen:**
    Der Assistent führt den `repochecker` aus, um sicherzustellen, dass keine formalen Fehler vorliegen:
-
    ```bash
    npx @iobroker/repochecker lubepi/ioBroker.ntfy-client
    ```
-
-   _Hinweis: Fehler `E2000` (Paket noch nicht auf NPM), Fehler `E2004` (Version noch nicht auf NPM) und Warnung `W4001` (Paket nicht im iobroker latest Repository) können ignoriert werden, da diese erst NACH dem Release verschwinden._
+   *Hinweis: Fehler `E2004` (Version noch nicht auf NPM) und Warnung `W2002` (Versions-Mismatch) können ignoriert werden, da diese erst NACH dem Release verschwinden.*
 
 4. **Changelog-Einträge formulieren:**
    Der Assistent schlägt saubere, präzise Changelog-Sätze vor, die du bestätigst oder anpasst.
 
 5. **Changelog in README.md eintragen:**
-   Der Assistent trägt die Änderungen **direkt unter** dem Platzhalter `### **WORK IN PROGRESS**` ein.
-   **WICHTIG:** Erstelle _keinen_ manuellen Header mit der neuen Versionsnummer (z.B. `### 0.1.8`), da das Release-Script diesen Header selbst generiert und sonst mit einem Fehler ("Changelog is empty") abbricht.
+   Der Assistent trägt die Änderungen **direkt unter** dem Platzhalter `### **WORK IN PROGRESS**` ein. 
+   **WICHTIG:** Erstelle *keinen* manuellen Header mit der neuen Versionsnummer (z.B. `### 0.1.8`), da das Release-Script diesen Header selbst generiert und sonst mit einem Fehler ("Changelog is empty") abbricht.
 
 6. **Änderungen committen (WICHTIG):**
    Bevor das Release-Script gestartet wird, muss der Assistent **alle** ausstehenden Änderungen (README.md, Workflows, .gitignore, etc.) committen und pushen. Das Release-Script prüft auf einen sauberen Git-Status und bricht bei jeder kleinsten Änderung ab.
@@ -58,15 +54,13 @@ git log $(git describe --tags --abbrev=0)..HEAD --oneline
 Wenn Changelog und Version abgesegnet sind, startet der Assistent das Release-Script:
 
 // turbo
-
 ```bash
 npm run release -- patch
 ```
 
-_(oder `minor`/`major` je nach Release-Typ)_
+*(oder `minor`/`major` je nach Release-Typ)*
 
 Das Script läuft automatisch durch:
-
 - ✅ **Lint-Check** (`npm run lint`) – bricht sofort ab wenn Fehler
 - ✅ **Tests** (`npm test`) – bricht sofort ab wenn Tests fehlschlagen
 - ✅ Lizenz-Check
@@ -82,7 +76,6 @@ Das Script läuft automatisch durch:
 Während der Pause prüfen wir gemeinsam die generierten Änderungen:
 
 Der Assistent liest automatisch die modifizierten Dateien und gibt dir einen Überblick:
-
 - `README.md` – Changelog korrekt?
 - `io-package.json` – Übersetzungen plausibel? News-Einträge vollständig?
 - `package.json` – Versionsnummer stimmt?
@@ -95,7 +88,6 @@ Bei Problemen: Im Terminal **Ctrl+C** abbrechen und Korrekturen vornehmen.
 ## Schritt 4 – Automatischer Abschluss
 
 Nach der Bestätigung läuft alles automatisch:
-
 - ✅ Git-Commit mit allen Änderungen
 - ✅ Git-Tag `vX.Y.Z` erstellen
 - ✅ Push zu GitHub (löst CI/CD aus)
@@ -109,3 +101,4 @@ Nach der Bestätigung läuft alles automatisch:
 - **DeepL statt ioBroker Translator:** Für bessere Übersetzungen kann `DEEPL_API_KEY` gesetzt werden.
 - **Nur Tag pushen** (bei Branch-Protection): `npm run release -- patch --tagOnly`
 - **Prerelease:** Für Alpha/Beta-Versionen `npm run release -- patch --preid alpha`
+

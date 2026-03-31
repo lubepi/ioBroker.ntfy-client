@@ -23,7 +23,7 @@
     "node": ">=20"
   },
   "files": [
-    "admin/",
+    "admin{,/!(src)/**}/*",
     "io-package.json",
     "LICENSE",
     "main.js"
