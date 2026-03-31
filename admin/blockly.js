@@ -1585,7 +1585,6 @@ if (typeof Blockly !== "undefined") {
           block.getFieldValue(`FIELD_${attrName}`) === "TRUE"
             ? "true"
             : "false";
-
       } else if (attrName === "priority") {
         const prioVal = block.getFieldValue(`FIELD_${attrName}`);
         vArgument = `"${prioVal}"`;
