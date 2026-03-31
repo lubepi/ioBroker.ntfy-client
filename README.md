@@ -75,6 +75,7 @@ Configure topics in the adapter settings under the **Topics** tab. The adapter s
 | `lastTimestamp`         | Last message timestamp                    |
 | `lastExpires`           | Last message expiry timestamp             |
 | `lastMessageId`         | Last message ID                           |
+| `lastSequenceId`        | Last sequence ID (for managing messages)  |
 | `lastTopic`             | Last received topic name                  |
 | `lastEvent`             | Last received event type                  |
 | `lastJson`              | Full JSON of last received message        |

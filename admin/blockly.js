@@ -538,7 +538,7 @@ if (typeof Blockly !== "undefined") {
     fr: "Ajouter une option",
     it: "Aggiungi un'opzione",
     es: "Añadir una opción",
-    pl: "Додaj opcję",
+    pl: "Dodaj opcję",
     uk: "Додати опцію",
     "zh-cn": "添加选项",
   };
