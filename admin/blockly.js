@@ -1601,13 +1601,8 @@ if (typeof Blockly !== "undefined") {
           vArgument = vArgument === "true" ? "false" : "true";
         }
       } else if (attrName === "priority") {
-        // Logic for dropdown
         const prioVal = block.getFieldValue(`FIELD_${attrName}`);
-        if (prioVal !== "default") {
-          vArgument = `"${prioVal}"`;
-        } else {
-          continue; // Skip if default
-        }
+        vArgument = `"${prioVal}"`;
       } else {
         // Logic for value inputs (texts, variables)
         vArgument = Blockly.JavaScript.valueToCode(
@@ -1626,11 +1621,9 @@ if (typeof Blockly !== "undefined") {
         }
       }
 
-      // Only push if there is actually content
       if (
-        vArgument &&
-        vArgument !== "''" &&
-        vArgument !== '""' &&
+        vArgument !== undefined &&
+        vArgument !== null &&
         vArgument !== "null"
       ) {
         args.push({
