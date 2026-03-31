@@ -1407,7 +1407,7 @@ if (typeof Blockly !== "undefined") {
         .setCheck("String")
         .appendField(Blockly.Words["ntfy_topic"][systemLang]);
 
-      this.appendValueInput("SEQUENCE_ID")
+      this.appendValueInput("MESSAGE_OR_SEQUENCE_ID")
         .setCheck("String")
         .appendField(Blockly.Words["ntfy_sequence_id"][systemLang]);
 
@@ -1497,9 +1497,9 @@ if (typeof Blockly !== "undefined") {
       "TOPIC",
       Blockly.JavaScript.ORDER_ATOMIC,
     );
-    var value_sequence_id = Blockly.JavaScript.valueToCode(
+    var value_id = Blockly.JavaScript.valueToCode(
       block,
-      "SEQUENCE_ID",
+      "MESSAGE_OR_SEQUENCE_ID",
       Blockly.JavaScript.ORDER_ATOMIC,
     );
     var fWithStatement = block.getFieldValue("WITH_STATEMENT");
@@ -1519,7 +1519,9 @@ if (typeof Blockly !== "undefined") {
 
     var objArr = [];
     objArr.push(`topic: ${value_topic}`);
-    objArr.push(`sequence_id: ${value_sequence_id}`);
+    objArr.push(`message_or_sequence_id: ${value_id}`);
+    // Backward compatibility for sequence_id
+    objArr.push(`sequence_id: ${value_id}`);
 
     let logParts = [];
     if (value_topic && value_topic !== "''" && value_topic !== '""') {
@@ -1527,12 +1529,8 @@ if (typeof Blockly !== "undefined") {
     } else {
       logParts.push("'topic: (standard)'");
     }
-    if (
-      value_sequence_id &&
-      value_sequence_id !== "''" &&
-      value_sequence_id !== '""'
-    ) {
-      logParts.push(`'sequence_id: ' + ${value_sequence_id}`);
+    if (value_id && value_id !== "''" && value_id !== '""') {
+      logParts.push(`'message/sequence ID: ' + ${value_id}`);
     }
 
     let logCode = "";

@@ -1788,9 +1788,9 @@ class Ntfy extends utils.Adapter {
   }
 
   /**
-   * Dismiss (clear/mark as read) a notification.
+   * Dismiss a notification (mark as read).
    *
-   * @param {string|object} msgObj The message object containing topic and sequence_id
+   * @param {string|object} msgObj The message object or ID
    * @returns {Promise<object>} The response data
    */
   async dismissNotification(msgObj) {
@@ -1798,11 +1798,14 @@ class Ntfy extends utils.Adapter {
       `dismissNotification called with: ${JSON.stringify(msgObj)}`,
     );
     let topic = "";
-    let sequenceId = "";
+    let messageOrSequenceId = "";
 
     if (typeof msgObj === "object") {
       topic = msgObj.topic || "";
-      sequenceId = msgObj.sequence_id || "";
+      messageOrSequenceId =
+        msgObj.message_or_sequence_id || msgObj.sequence_id || "";
+    } else {
+      messageOrSequenceId = msgObj;
     }
 
     if (!topic) {
@@ -1813,30 +1816,32 @@ class Ntfy extends utils.Adapter {
       throw new Error("Topic is required to dismiss a notification.");
     }
 
-    if (!sequenceId) {
-      throw new Error("sequence_id is required to dismiss a notification.");
+    if (!messageOrSequenceId) {
+      throw new Error(
+        "message_or_sequence_id is required to dismiss a notification.",
+      );
     }
 
     const url = (this.config.url || "https://ntfy.sh").replace(/\/+$/, "");
-    const endpoint = `${url}/${encodeURIComponent(topic)}/${encodeURIComponent(sequenceId)}/clear`;
+    const endpoint = `${url}/${encodeURIComponent(topic)}/${encodeURIComponent(messageOrSequenceId)}/clear`;
 
     const headers = this.getAuthHeaders();
 
     try {
       this.log.debug(
-        `Dismissing notification ${sequenceId} on topic "${topic}" (via PUT)`,
+        `Dismissing notification ${messageOrSequenceId} on topic "${topic}" (via PUT)`,
       );
       const response = await axios.put(endpoint, null, {
         headers,
         timeout: 10000,
       });
       this.log.debug(
-        `Notification "${sequenceId}" successfully dismissed on topic "${topic}" (HTTP ${response.status})`,
+        `Notification "${messageOrSequenceId}" successfully dismissed on topic "${topic}" (HTTP ${response.status})`,
       );
       return response.data || {};
     } catch (error) {
       this.log.error(
-        `Failed to dismiss notification "${sequenceId}" on topic "${topic}": ${error.message}`,
+        `Failed to dismiss notification "${messageOrSequenceId}" on topic "${topic}": ${error.message}`,
       );
       if (error.response) {
         const status = error.response.status;
@@ -1854,19 +1859,22 @@ class Ntfy extends utils.Adapter {
   }
 
   /**
-   * Delete a notification.
+   * Delete a notification from the server.
    *
-   * @param {string|object} msgObj The message object containing topic and sequence_id
+   * @param {string|object} msgObj The message object or ID
    * @returns {Promise<object>} The response data
    */
   async deleteNotification(msgObj) {
     this.log.debug(`deleteNotification called with: ${JSON.stringify(msgObj)}`);
     let topic = "";
-    let sequenceId = "";
+    let messageOrSequenceId = "";
 
     if (typeof msgObj === "object") {
       topic = msgObj.topic || "";
-      sequenceId = msgObj.sequence_id || "";
+      messageOrSequenceId =
+        msgObj.message_or_sequence_id || msgObj.sequence_id || "";
+    } else {
+      messageOrSequenceId = msgObj;
     }
 
     if (!topic) {
@@ -1877,30 +1885,32 @@ class Ntfy extends utils.Adapter {
       throw new Error("Topic is required to delete a notification.");
     }
 
-    if (!sequenceId) {
-      throw new Error("sequence_id is required to delete a notification.");
+    if (!messageOrSequenceId) {
+      throw new Error(
+        "message_or_sequence_id is required to delete a notification.",
+      );
     }
 
     const url = (this.config.url || "https://ntfy.sh").replace(/\/+$/, "");
-    const endpoint = `${url}/${encodeURIComponent(topic)}/${encodeURIComponent(sequenceId)}`;
+    const endpoint = `${url}/${encodeURIComponent(topic)}/${encodeURIComponent(messageOrSequenceId)}`;
 
     const headers = this.getAuthHeaders();
 
     try {
       this.log.debug(
-        `Deleting notification ${sequenceId} from topic "${topic}"`,
+        `Deleting notification ${messageOrSequenceId} from topic "${topic}"`,
       );
       const response = await axios.delete(endpoint, {
         headers,
         timeout: 10000,
       });
       this.log.debug(
-        `Notification "${sequenceId}" successfully deleted from topic "${topic}" (HTTP ${response.status})`,
+        `Notification "${messageOrSequenceId}" successfully deleted from topic "${topic}" (HTTP ${response.status})`,
       );
       return response.data || {};
     } catch (error) {
       this.log.error(
-        `Failed to delete notification "${sequenceId}" from topic "${topic}": ${error.message}`,
+        `Failed to delete notification "${messageOrSequenceId}" from topic "${topic}": ${error.message}`,
       );
       if (error.response) {
         const status = error.response.status;
