@@ -1368,10 +1368,20 @@ class Ntfy extends utils.Adapter {
       headers["Sequence-ID"] = sequenceId;
     }
 
-    if (disableCache === true || disableCache === "true" || disableCache === "yes" || disableCache === "1") {
+    if (
+      disableCache === true ||
+      disableCache === "true" ||
+      disableCache === "yes" ||
+      disableCache === "1"
+    ) {
       headers["Cache"] = "no";
     }
-    if (disableFirebase === true || disableFirebase === "true" || disableFirebase === "yes" || disableFirebase === "1") {
+    if (
+      disableFirebase === true ||
+      disableFirebase === "true" ||
+      disableFirebase === "yes" ||
+      disableFirebase === "1"
+    ) {
       headers["Firebase"] = "no";
     }
     if (unifiedPush === true || unifiedPush === "true" || unifiedPush === "1") {
@@ -1387,7 +1397,10 @@ class Ntfy extends utils.Adapter {
       template !== false
     ) {
       const tplVal =
-        template === true || template === "true" || template === "yes" || template === "1"
+        template === true ||
+        template === "true" ||
+        template === "yes" ||
+        template === "1"
           ? "yes"
           : template;
       requestUrl += `${requestUrl.includes("?") ? "&" : "?"}tpl=${tplVal}`;
@@ -1450,13 +1463,27 @@ class Ntfy extends utils.Adapter {
       if (sequenceId) {
         debugParams.push(`Sequence-ID: "${sequenceId}"`);
       }
-      if (disableCache === true || disableCache === "true" || disableCache === "yes" || disableCache === "1") {
+      if (
+        disableCache === true ||
+        disableCache === "true" ||
+        disableCache === "yes" ||
+        disableCache === "1"
+      ) {
         debugParams.push(`Cache: "no"`);
       }
-      if (disableFirebase === true || disableFirebase === "true" || disableFirebase === "yes" || disableFirebase === "1") {
+      if (
+        disableFirebase === true ||
+        disableFirebase === "true" ||
+        disableFirebase === "yes" ||
+        disableFirebase === "1"
+      ) {
         debugParams.push(`Firebase: "no"`);
       }
-      if (unifiedPush === true || unifiedPush === "true" || unifiedPush === "1") {
+      if (
+        unifiedPush === true ||
+        unifiedPush === "true" ||
+        unifiedPush === "1"
+      ) {
         debugParams.push(`UnifiedPush: "1"`);
       }
       if (template) {
@@ -1521,8 +1548,8 @@ class Ntfy extends utils.Adapter {
    * @param {string} call Call
    * @param {string} icon Icon URL
    * @param {string} sequenceId Sequence ID
-   * @param {string} cache Cache control
-   * @param {string} firebase Firebase control
+   * @param {string|boolean} disableCache Disable server-side caching
+   * @param {string|boolean} disableFirebase Disable Firebase Cloud Messaging
    * @param {string} unifiedPush UnifiedPush control
    * @param {string} template Template control
    * @param {string} filePath Path to the file to attach
@@ -1649,10 +1676,20 @@ class Ntfy extends utils.Adapter {
       headers["Sequence-ID"] = sequenceId;
     }
 
-    if (disableCache === true || disableCache === "true" || disableCache === "yes" || disableCache === "1") {
+    if (
+      disableCache === true ||
+      disableCache === "true" ||
+      disableCache === "yes" ||
+      disableCache === "1"
+    ) {
       headers["Cache"] = "no";
     }
-    if (disableFirebase === true || disableFirebase === "true" || disableFirebase === "yes" || disableFirebase === "1") {
+    if (
+      disableFirebase === true ||
+      disableFirebase === "true" ||
+      disableFirebase === "yes" ||
+      disableFirebase === "1"
+    ) {
       headers["Firebase"] = "no";
     }
     if (unifiedPush === true || unifiedPush === "true" || unifiedPush === "1") {
@@ -1668,7 +1705,10 @@ class Ntfy extends utils.Adapter {
       template !== false
     ) {
       const tplVal =
-        template === true || template === "true" || template === "yes" || template === "1"
+        template === true ||
+        template === "true" ||
+        template === "yes" ||
+        template === "1"
           ? "yes"
           : template;
       requestUrl += `${requestUrl.includes("?") ? "&" : "?"}tpl=${tplVal}`;
@@ -1731,13 +1771,27 @@ class Ntfy extends utils.Adapter {
       if (sequenceId) {
         debugFileParams.push(`Sequence-ID: "${sequenceId}"`);
       }
-      if (disableCache === true || disableCache === "true" || disableCache === "yes" || disableCache === "1") {
+      if (
+        disableCache === true ||
+        disableCache === "true" ||
+        disableCache === "yes" ||
+        disableCache === "1"
+      ) {
         debugFileParams.push(`Cache: "no"`);
       }
-      if (disableFirebase === true || disableFirebase === "true" || disableFirebase === "yes" || disableFirebase === "1") {
+      if (
+        disableFirebase === true ||
+        disableFirebase === "true" ||
+        disableFirebase === "yes" ||
+        disableFirebase === "1"
+      ) {
         debugFileParams.push(`Firebase: "no"`);
       }
-      if (unifiedPush === true || unifiedPush === "true" || unifiedPush === "1") {
+      if (
+        unifiedPush === true ||
+        unifiedPush === "true" ||
+        unifiedPush === "1"
+      ) {
         debugFileParams.push(`UnifiedPush: "1"`);
       }
       if (template) {
