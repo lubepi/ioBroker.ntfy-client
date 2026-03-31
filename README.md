@@ -25,7 +25,7 @@ Send and receive notifications via [ntfy.sh](https://ntfy.sh) directly from ioBr
 - Basic authentication and bearer token support
 - Custom server URLs (or the standard ntfy.sh instance)
 - **Integrated `sendTo` Blockly blocks** for graphic scripts (send and manage)
-- **Dismiss (clear) and delete notifications** by sequence ID (message replacement)
+- **Dismiss (clear) and delete notifications** by sequence ID
 - File upload attachments via PUT
 
 ### Supported Notification Parameters
