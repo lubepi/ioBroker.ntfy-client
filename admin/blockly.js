@@ -657,7 +657,7 @@ if (typeof Blockly !== "undefined") {
     '             <field name="TEXT"></field>' +
     "         </shadow>" +
     "     </value>" +
-    '     <value name="SEQUENCE_ID">' +
+    '     <value name="MESSAGE_OR_SEQUENCE_ID">' +
     '         <shadow type="text">' +
     '             <field name="TEXT"></field>' +
     "         </shadow>" +
