@@ -1802,8 +1802,7 @@ class Ntfy extends utils.Adapter {
 
     if (typeof msgObj === "object") {
       topic = msgObj.topic || "";
-      messageOrSequenceId =
-        msgObj.message_or_sequence_id || msgObj.sequence_id || "";
+      messageOrSequenceId = msgObj.message_or_sequence_id || "";
     } else {
       messageOrSequenceId = msgObj;
     }
@@ -1871,8 +1870,7 @@ class Ntfy extends utils.Adapter {
 
     if (typeof msgObj === "object") {
       topic = msgObj.topic || "";
-      messageOrSequenceId =
-        msgObj.message_or_sequence_id || msgObj.sequence_id || "";
+      messageOrSequenceId = msgObj.message_or_sequence_id || "";
     } else {
       messageOrSequenceId = msgObj;
     }
