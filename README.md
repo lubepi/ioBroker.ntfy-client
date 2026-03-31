@@ -48,8 +48,8 @@ Send and receive notifications via [ntfy.sh](https://ntfy.sh) directly from ioBr
 | `call`         | Phone number to call with TTS (requires ntfy Pro)                                  |
 | `icon`         | Icon URL displayed next to the notification                                        |
 | `sequence_id`  | Replace/update an existing notification with the same Sequence-ID                  |
-| `disable_cache`  | Set to `true` to disable server-side caching                                       |
-| `disable_firebase`| Set to `true` to disable forwarding to Firebase Cloud Messaging (Android)         |
+| `disable_cache`     | Set to `true`/`yes` to disable server-side caching                                 |
+| `disable_firebase`  | Set to `true`/`yes` to disable forwarding to Firebase Cloud Messaging (Android)    |
 | `unified_push` | Set to `1` to enable UnifiedPush support                                           |
 | `template`     | Use `true`/`yes` for inline templates, or a name like `github` for predefined ones |
 | `data`         | JSON data object or string to be used for the template context                     |

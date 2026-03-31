@@ -1368,10 +1368,10 @@ class Ntfy extends utils.Adapter {
       headers["Sequence-ID"] = sequenceId;
     }
 
-    if (disableCache === true || disableCache === "true" || disableCache === "no") {
+    if (disableCache === true || disableCache === "true" || disableCache === "yes" || disableCache === "1") {
       headers["Cache"] = "no";
     }
-    if (disableFirebase === true || disableFirebase === "true" || disableFirebase === "no") {
+    if (disableFirebase === true || disableFirebase === "true" || disableFirebase === "yes" || disableFirebase === "1") {
       headers["Firebase"] = "no";
     }
     if (unifiedPush === true || unifiedPush === "true" || unifiedPush === "1") {
@@ -1450,10 +1450,10 @@ class Ntfy extends utils.Adapter {
       if (sequenceId) {
         debugParams.push(`Sequence-ID: "${sequenceId}"`);
       }
-      if (disableCache === true || disableCache === "true" || disableCache === "no") {
+      if (disableCache === true || disableCache === "true" || disableCache === "yes" || disableCache === "1") {
         debugParams.push(`Cache: "no"`);
       }
-      if (disableFirebase === true || disableFirebase === "true" || disableFirebase === "no") {
+      if (disableFirebase === true || disableFirebase === "true" || disableFirebase === "yes" || disableFirebase === "1") {
         debugParams.push(`Firebase: "no"`);
       }
       if (unifiedPush === true || unifiedPush === "true" || unifiedPush === "1") {
@@ -1649,10 +1649,10 @@ class Ntfy extends utils.Adapter {
       headers["Sequence-ID"] = sequenceId;
     }
 
-    if (disableCache === true || disableCache === "true" || disableCache === "no") {
+    if (disableCache === true || disableCache === "true" || disableCache === "yes" || disableCache === "1") {
       headers["Cache"] = "no";
     }
-    if (disableFirebase === true || disableFirebase === "true" || disableFirebase === "no") {
+    if (disableFirebase === true || disableFirebase === "true" || disableFirebase === "yes" || disableFirebase === "1") {
       headers["Firebase"] = "no";
     }
     if (unifiedPush === true || unifiedPush === "true" || unifiedPush === "1") {
@@ -1731,10 +1731,10 @@ class Ntfy extends utils.Adapter {
       if (sequenceId) {
         debugFileParams.push(`Sequence-ID: "${sequenceId}"`);
       }
-      if (disableCache === true || disableCache === "true" || disableCache === "no") {
+      if (disableCache === true || disableCache === "true" || disableCache === "yes" || disableCache === "1") {
         debugFileParams.push(`Cache: "no"`);
       }
-      if (disableFirebase === true || disableFirebase === "true" || disableFirebase === "no") {
+      if (disableFirebase === true || disableFirebase === "true" || disableFirebase === "yes" || disableFirebase === "1") {
         debugFileParams.push(`Firebase: "no"`);
       }
       if (unifiedPush === true || unifiedPush === "true" || unifiedPush === "1") {
