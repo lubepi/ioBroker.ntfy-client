@@ -1802,7 +1802,7 @@ class Ntfy extends utils.Adapter {
 
     if (typeof msgObj === "object") {
       topic = msgObj.topic || "";
-      messageOrSequenceId = msgObj.message_or_sequence_id || "";
+      messageOrSequenceId = msgObj.sequence_id || "";
     } else {
       messageOrSequenceId = msgObj;
     }
@@ -1817,7 +1817,7 @@ class Ntfy extends utils.Adapter {
 
     if (!messageOrSequenceId) {
       throw new Error(
-        "message_or_sequence_id is required to dismiss a notification.",
+        "sequence_id is required to dismiss a notification.",
       );
     }
 
@@ -1870,7 +1870,7 @@ class Ntfy extends utils.Adapter {
 
     if (typeof msgObj === "object") {
       topic = msgObj.topic || "";
-      messageOrSequenceId = msgObj.message_or_sequence_id || "";
+      messageOrSequenceId = msgObj.sequence_id || "";
     } else {
       messageOrSequenceId = msgObj;
     }
@@ -1885,7 +1885,7 @@ class Ntfy extends utils.Adapter {
 
     if (!messageOrSequenceId) {
       throw new Error(
-        "message_or_sequence_id is required to delete a notification.",
+        "sequence_id is required to delete a notification.",
       );
     }
 

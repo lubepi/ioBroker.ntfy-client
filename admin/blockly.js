@@ -317,7 +317,7 @@ if (typeof Blockly !== "undefined") {
     uk: "ID послідовності",
     "zh-cn": "序列ID",
   };
-  Blockly.Words["ntfy_message_or_sequence_id"] = {
+  Blockly.Words["ntfy_manage_id"] = {
     en: "message / sequence ID",
     de: "Nachrichten- / Sequenz-ID",
     ru: "ID сообщения / последовательности",
@@ -571,7 +571,7 @@ if (typeof Blockly !== "undefined") {
       "发送 ntfy-client 通知。\n主题：Topic。\n消息：文本或 Go 模板字符串（例：{{.temp}}°C）。\n标题：标题。\n优先级：1-5。\n标签：表情符号 (例: skull,warn)。\n点击链接：点击链接。\n图标链接：定制图标。\n操作 (JSON)：按钮。\n附件链接：附件链接。\n附加文件（本地路径）：本地文件。\n文件名：文件名。\n序列ID：更新ID。\n延迟：延迟 (例: 10s, 1m, 1h)。\n电子邮件（转发至）：转发邮件。\n电话（电话号码）：拨打电话。\n禁用缓存控制：禁用缓存。\n禁用 Firebase：禁用 Firebase。\nUnifiedPush：UnifiedPush。\n模板：true/yes 用于内联模板，或名称（例：github）用于预定义模板。\nJSON 数据：模板上下文的数据对象。\nmarkdown：Markdown。",
   };
   Blockly.Words["ntfy_manage_tooltip"] = {
-    en: "Manage ntfy-client messages.\naction: mark as read and dismiss or delete.\ntopic: Topic.\nmessage / sequence ID: Unique message ID or custom sequence ID.",
+    en: "Manage ntfy-client messages.\naction: mark as read and dismiss or delete.\ntopic: Topic.\nsequence ID: Unique message ID or custom sequence ID.",
     de: "ntfy-client Nachrichten verwalten.\nAktion: Als gelesen markieren und ausblenden oder löschen.\nTopic: Topic-Name.\nNachrichten- / Sequenz-ID: Eindeutige ID der Nachricht oder eigene Sequenz-ID.",
     ru: "Управление ntfy-client.\nдействие: отметить как прочитанное и отклонить или удалить.\nТопик: Топик.\nID сообщения / последовательности: Уникальный ID сообщения или ID последовательности.",
     pt: "Gerir mensagens ntfy-client.\nacção: marcar como lida e descartar ou eliminar.\ntopic: Topic.\nID de mensagem / sequência: ID único da mensagem ou ID de sequência.",
@@ -657,7 +657,7 @@ if (typeof Blockly !== "undefined") {
     '             <field name="TEXT"></field>' +
     "         </shadow>" +
     "     </value>" +
-    '     <value name="MESSAGE_OR_SEQUENCE_ID">' +
+    '     <value name="SEQUENCE_ID">' +
     '         <shadow type="text">' +
     '             <field name="TEXT"></field>' +
     "         </shadow>" +
@@ -1422,9 +1422,9 @@ if (typeof Blockly !== "undefined") {
         .setCheck("String")
         .appendField(Blockly.Words["ntfy_topic"][systemLang]);
 
-      this.appendValueInput("MESSAGE_OR_SEQUENCE_ID")
+      this.appendValueInput("SEQUENCE_ID")
         .setCheck("String")
-        .appendField(Blockly.Words["ntfy_message_or_sequence_id"][systemLang]);
+        .appendField(Blockly.Words["ntfy_sequence_id"][systemLang]);
 
       this.appendDummyInput("WITH_STATEMENT")
         .appendField(Blockly.Words["with_results"][systemLang])
@@ -1516,7 +1516,7 @@ if (typeof Blockly !== "undefined") {
     );
     var value_id = Blockly.JavaScript.valueToCode(
       block,
-      "MESSAGE_OR_SEQUENCE_ID",
+      "SEQUENCE_ID",
       Blockly.JavaScript.ORDER_ATOMIC,
     );
     var fWithStatement = block.getFieldValue("WITH_STATEMENT");
@@ -1536,7 +1536,7 @@ if (typeof Blockly !== "undefined") {
 
     var objArr = [];
     objArr.push(`topic: ${value_topic}`);
-    objArr.push(`message_or_sequence_id: ${value_id}`);
+    objArr.push(`sequence_id: ${value_id}`);
 
     let logParts = [];
     if (value_topic && value_topic !== "''" && value_topic !== '""') {
@@ -1545,7 +1545,7 @@ if (typeof Blockly !== "undefined") {
       logParts.push("'topic: (standard)'");
     }
     if (value_id && value_id !== "''" && value_id !== '""') {
-      logParts.push(`'message/sequence ID: ' + ${value_id}`);
+      logParts.push(`'sequence ID: ' + ${value_id}`);
     }
 
     let logCode = "";
