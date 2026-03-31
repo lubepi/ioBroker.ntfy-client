@@ -317,19 +317,6 @@ if (typeof Blockly !== "undefined") {
     uk: "ID послідовності",
     "zh-cn": "序列ID",
   };
-  Blockly.Words["ntfy_manage_id"] = {
-    en: "message / sequence ID",
-    de: "Nachrichten- / Sequenz-ID",
-    ru: "ID сообщения / последовательности",
-    pt: "ID de mensagem / sequência",
-    nl: "bericht / sequentie-ID",
-    fr: "ID de message / séquence",
-    it: "ID messaggio / sequenza",
-    es: "ID de mensaje / secuencia",
-    pl: "ID wiadomości / sekwencji",
-    uk: "ID повідомлення / послідовності",
-    "zh-cn": "消息 / 序列ID",
-  };
   Blockly.Words["ntfy_manage"] = {
     en: "ntfy-client management",
     de: "ntfy-client Verwaltung",
@@ -572,17 +559,17 @@ if (typeof Blockly !== "undefined") {
   };
   Blockly.Words["ntfy_manage_tooltip"] = {
     en: "Manage ntfy-client messages.\naction: mark as read and dismiss or delete.\ntopic: Topic.\nsequence ID: Unique message ID or custom sequence ID.",
-    de: "ntfy-client Nachrichten verwalten.\nAktion: Als gelesen markieren und ausblenden oder löschen.\nTopic: Topic-Name.\nNachrichten- / Sequenz-ID: Eindeutige ID der Nachricht oder eigene Sequenz-ID.",
-    ru: "Управление ntfy-client.\nдействие: отметить как прочитанное и отклонить или удалить.\nТопик: Топик.\nID сообщения / последовательности: Уникальный ID сообщения или ID последовательности.",
-    pt: "Gerir mensagens ntfy-client.\nacção: marcar como lida e descartar ou eliminar.\ntopic: Topic.\nID de mensagem / sequência: ID único da mensagem ou ID de sequência.",
-    nl: "Beheer ntfy-client berichten.\nactie: markeren als gelezen en negeren of verwijderen.\ntopic: Topic.\nbericht / sequentie-ID: Uniek bericht-ID of eigen sequentie-ID.",
-    fr: "Gérer les messages ntfy-client.\naction: marquer comme lu et ignorer ou supprimer.\ntopic: Topic.\nID de message / séquence: ID unique du message ou ID de séquence.",
-    it: "Gestisci messaggi ntfy-client.\nazione: segna come letto e ignora o elimina.\ntopic: Topic.\nID messaggio / sequenza: ID univoco del messaggio o ID sequenza.",
-    es: "Gestionar mensajes ntfy-client.\nacción: marcar como leído y descartar o eliminar.\ntopic: Topic.\nID de mensaje / secuencia: ID único del mensaje o ID de secuencia.",
-    pl: "Zarządzaj wiadomościami ntfy-client.\nakcja: oznacz jako przeczytane i odrzuć lub usuń.\nTopik: Topik.\nID wiadomości / sekwencji: Unikalny ID wiadomości lub ID sekwencji.",
-    uk: "Керування ntfy-client.\nдія: позначити як прочитане та відхилити або видалити.\nТопик: Топик.\nID повідомлення / послідовності: Унікальний ID повідомлення або ID послідовності.",
+    de: "ntfy-client Nachrichten verwalten.\nAktion: Als gelesen markieren und ausblenden oder löschen.\nTopic: Topic-Name.\nSequenz-ID: Eindeutige ID der Nachricht oder eigene Sequenz-ID.",
+    ru: "Управление ntfy-client.\nдействие: отметить как прочитанное и отклонить или удалить.\nТопик: Топик.\nID последовательности: Уникальный ID сообщения или ID последовательности.",
+    pt: "Gerir mensagens ntfy-client.\nacção: marcar como lida e descartar ou eliminar.\ntopic: Topic.\nID de sequência: ID único da mensagem ou ID de sequência.",
+    nl: "Beheer ntfy-client berichten.\nactie: markeren als gelezen en negeren of verwijderen.\ntopic: Topic.\nsequentie-ID: Uniek bericht-ID of eigen sequentie-ID.",
+    fr: "Gérer les messages ntfy-client.\naction: marquer comme lu et ignorer ou supprimer.\ntopic: Topic.\nID de séquence: ID unique du message ou ID de séquence.",
+    it: "Gestisci messaggi ntfy-client.\nazione: segna come letto e ignora o elimina.\ntopic: Topic.\nID sequenza: ID univoco del messaggio o ID sequenza.",
+    es: "Gestionar mensajes ntfy-client.\nacción: marcar como leído y descartar o eliminar.\ntopic: Topic.\nID de secuencia: ID único del mensaje o ID de secuencia.",
+    pl: "Zarządzaj wiadomościami ntfy-client.\nakcja: oznacz jako przeczytane i odrzuć lub usuń.\nTopik: Topik.\nID sekwencji: Unikalny ID wiadomości lub ID sekwencji.",
+    uk: "Керування ntfy-client.\nдія: позначити як прочитане та відхилити або видалити.\nТопик: Топик.\nID послідовності: Унікальний ID повідомлення або ID послідовності.",
     "zh-cn":
-      "管理 ntfy-client 消息。\n行动：标记为已读并驳回或删除。\n主题：Topic。\n消息 / 序列ID：唯一消息ID或序列ID。",
+      "管理 ntfy-client 消息。\n行动：标记为已读并驳回或删除。\n主题：Topic。\n序列ID：唯一消息ID或序列ID。",
   };
 
   Blockly.Blocks["ntfy_mutator_container"] = {

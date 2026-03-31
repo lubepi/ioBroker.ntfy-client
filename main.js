@@ -1816,9 +1816,7 @@ class Ntfy extends utils.Adapter {
     }
 
     if (!messageOrSequenceId) {
-      throw new Error(
-        "sequence_id is required to dismiss a notification.",
-      );
+      throw new Error("sequence_id is required to dismiss a notification.");
     }
 
     const url = (this.config.url || "https://ntfy.sh").replace(/\/+$/, "");
@@ -1884,9 +1882,7 @@ class Ntfy extends utils.Adapter {
     }
 
     if (!messageOrSequenceId) {
-      throw new Error(
-        "sequence_id is required to delete a notification.",
-      );
+      throw new Error("sequence_id is required to delete a notification.");
     }
 
     const url = (this.config.url || "https://ntfy.sh").replace(/\/+$/, "");
