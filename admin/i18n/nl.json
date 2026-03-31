@@ -1,6 +1,7 @@
 {
     "Access Token": "Toegangstoken",
     "Access Token Auth": "Toegangstoken",
+    "Authentication": "Authenticatie",
     "Authentication Type": "Authenticatietype",
     "Configure topics to subscribe to. The adapter will receive messages from these topics in real-time via SSE (Server-Sent Events).": "Configureer onderwerpen om u op te abonneren. De adapter ontvangt berichten van deze onderwerpen in realtime via SSE (Server-Sent Events).",
     "Connection": "Verbinding",
@@ -10,12 +11,11 @@
     "Display Name": "Weergavenaam",
     "None": "Geen",
     "Password": "Wachtwoord",
+    "Server Configuration": "Serverconfiguratie",
     "Subscribed Topics": "Geabonneerde onderwerpen",
     "Topic Name": "Onderwerpnaam",
     "Topics": "Onderwerpen",
     "Username": "Gebruikersnaam",
     "Username / Password": "Gebruikersnaam / Wachtwoord",
-    "ntfy Server URL": "ntfy Server URL",
-    "Server Configuration": "Serverconfiguratie",
-    "Authentication": "Authenticatie"
+    "ntfy Server URL": "ntfy Server URL"
 }

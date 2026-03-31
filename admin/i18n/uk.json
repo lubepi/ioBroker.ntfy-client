@@ -1,6 +1,7 @@
 {
     "Access Token": "Токен доступу",
     "Access Token Auth": "Токен доступу",
+    "Authentication": "Автентифікація",
     "Authentication Type": "Тип автентифікації",
     "Configure topics to subscribe to. The adapter will receive messages from these topics in real-time via SSE (Server-Sent Events).": "Налаштуйте теми для підписки. Адаптер отримуватиме повідомлення з цих тем у режимі реального часу через SSE (Server-Sent Events).",
     "Connection": "З'єднання",
@@ -10,12 +11,11 @@
     "Display Name": "Ім'я для відображення",
     "None": "Немає",
     "Password": "Пароль",
+    "Server Configuration": "Конфігурація сервера",
     "Subscribed Topics": "Підписані теми",
     "Topic Name": "Назва теми",
     "Topics": "Теми",
     "Username": "Ім'я користувача",
     "Username / Password": "Ім'я користувача / Пароль",
-    "ntfy Server URL": "URL-адреса сервера ntfy",
-    "Server Configuration": "Конфігурація сервера",
-    "Authentication": "Автентифікація"
+    "ntfy Server URL": "URL-адреса сервера ntfy"
 }

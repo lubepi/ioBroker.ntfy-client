@@ -1,6 +1,7 @@
 {
     "Access Token": "Token de acceso",
     "Access Token Auth": "Token de acceso",
+    "Authentication": "Autenticación",
     "Authentication Type": "Tipo de autenticación",
     "Configure topics to subscribe to. The adapter will receive messages from these topics in real-time via SSE (Server-Sent Events).": "Configure los topics a los que suscribirse. El adaptador recibirá mensajes de estos topics en tiempo real a través de SSE (Server-Sent Events).",
     "Connection": "Conexión",
@@ -10,12 +11,11 @@
     "Display Name": "Nombre para mostrar",
     "None": "Ninguno",
     "Password": "Contraseña",
+    "Server Configuration": "Configuración del servidor",
     "Subscribed Topics": "Topics suscritos",
     "Topic Name": "Nombre del topic",
     "Topics": "Topics",
     "Username": "Nombre de usuario",
     "Username / Password": "Nombre de usuario / Contraseña",
-    "ntfy Server URL": "URL del servidor ntfy",
-    "Server Configuration": "Configuración del servidor",
-    "Authentication": "Autenticación"
+    "ntfy Server URL": "URL del servidor ntfy"
 }
