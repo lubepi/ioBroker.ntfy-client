@@ -23,7 +23,7 @@ Send and receive notifications via [ntfy.sh](https://ntfy.sh) directly from ioBr
 * Basic authentication and bearer token support
 * Custom server URLs (or the standard ntfy.sh instance)
 * **Integrated `sendTo` Blockly blocks** for graphic scripts (send and manage)
-* **Dismiss (clear) and delete notifications** by sequence ID (message replacement)
+* **Dismiss (clear) and delete notifications** by message / sequence ID (message replacement)
 * File upload attachments via PUT
 
 ### Supported Notification Parameters
@@ -125,11 +125,11 @@ Clear or delete an existing notification:
 1. Set the **Instance**.
 2. Set the **Action** (mark as read and dismiss, or delete).
 3. Set the **Topic**.
-4. Set the **Sequence ID** of the message you want to manage.
+4. Set the **message / sequence ID** of the message you want to manage.
 
 > **Note on IDs:** Each notification is assigned a unique `id` (Message ID) by the server.
-> * If you **provide** a `sequence_id` when sending, you **must use this `sequence_id`** for all management actions (dismiss, delete).
-> * If you **do not provide** a `sequence_id`, the server-generated `id` serves as the identifier for management.
+> * If you **provide** a `sequence_id` when sending, you **must use this ID** (as `message_or_sequence_id`) for all management actions (dismiss, delete).
+> * If you **do not provide** a `sequence_id`, the server-generated `id` (Message ID) serves as the `message_or_sequence_id` for management.
 >
 > Multiple messages sharing the same `sequence_id` form a sequence — only the latest message in a sequence is displayed.
 
@@ -220,7 +220,7 @@ sendTo('ntfy-client.0', 'send', {
 ```javascript
 sendTo('ntfy-client.0', 'dismiss', {
     topic: 'home_alerts_xyz',
-    sequence_id: 'abc123'
+    message_or_sequence_id: 'abc123'
 });
 ```
 
@@ -228,7 +228,7 @@ sendTo('ntfy-client.0', 'dismiss', {
 ```javascript
 sendTo('ntfy-client.0', 'delete', {
     topic: 'home_alerts_xyz',
-    sequence_id: 'abc123'
+    message_or_sequence_id: 'abc123'
 });
 ```
 
@@ -243,8 +243,8 @@ Ntfy supports a few variations:
 | Command | Description |
 |---------|-------------|
 | `send` / `publish` | Send a notification |
-| `dismiss` / `clear` | Dismiss (mark as read) a notification by sequence_id |
-| `delete` | Delete a notification by sequence_id |
+| `dismiss` / `clear` | Dismiss (mark as read) a notification by message_or_sequence_id |
+| `delete` | Delete a notification by message_or_sequence_id |
 
 ## Changelog
 ### 0.1.0
@@ -252,7 +252,7 @@ Ntfy supports a few variations:
 * Subscribe to topics via SSE (receive messages in real-time)
 * Publish notifications with all ntfy parameters (title, priority, tags, click, attach, actions, markdown, delay, email, call, icon, sequence_id, cache, firebase, unified_push, template)
 * File upload attachments via PUT
-* Dismiss and delete notifications by sequence_id
+* Dismiss and delete notifications by message_or_sequence_id
 * Account statistics (messages, emails, calls, attachments, reservations)
 * Server version check for self-hosted instances
 * Dynamic connection status monitoring with health checks
