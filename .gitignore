@@ -4,4 +4,5 @@ tmp/
 *.tgz
 iob_npm.done
 .commitinfo
+.agents/
 .DS_Store
