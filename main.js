@@ -10,6 +10,7 @@ const { EventSource } = require("eventsource");
 const GENERAL_WARN_LOG_THROTTLE_MS = 30 * 60 * 1000;
 const SSE_ERROR_LOG_THROTTLE_MS = 2 * 60 * 1000;
 const SSE_PARSE_WARN_LOG_THROTTLE_MS = 2 * 60 * 1000;
+const STATE_QUALITY_INITIAL = 0x20;
 
 class Ntfy extends utils.Adapter {
   /**
@@ -81,6 +82,20 @@ class Ntfy extends utils.Adapter {
       safeHeaders["Authorization"] = "<hidden>";
     }
     return safeHeaders;
+  }
+
+  /**
+   * Write a placeholder value and mark it as substituted initial value.
+   *
+   * @param {string} id - State ID
+   * @param {any} val - State value
+   */
+  async setInitialStateAsync(id, val) {
+    await this.setStateAsync(id, {
+      val,
+      ack: true,
+      q: STATE_QUALITY_INITIAL,
+    });
   }
 
   /**
@@ -190,10 +205,10 @@ class Ntfy extends utils.Adapter {
    * Reset info states to defaults.
    */
   async resetInfoStates() {
-    await this.setStateAsync("info.connection", false, true);
-    await this.setStateAsync("info.serverVersion", "", true);
-    await this.setStateAsync("info.updateAvailable", false, true);
-    await this.setStateAsync("info.latestVersion", "", true);
+    await this.setInitialStateAsync("info.connection", false);
+    await this.setInitialStateAsync("info.serverVersion", "");
+    await this.setInitialStateAsync("info.updateAvailable", false);
+    await this.setInitialStateAsync("info.latestVersion", "");
   }
 
   /**
@@ -223,10 +238,10 @@ class Ntfy extends utils.Adapter {
     ];
 
     for (const id of numberStates) {
-      await this.setStateAsync(id, 0, true);
+      await this.setInitialStateAsync(id, 0);
     }
 
-    await this.setStateAsync("stats.account.tier", "", true);
+    await this.setInitialStateAsync("stats.account.tier", "");
   }
 
   /**
@@ -267,10 +282,9 @@ class Ntfy extends utils.Adapter {
 
       const safeName = this.sanitizeTopicName(topicName);
       for (const [suffix, defaultValue] of Object.entries(topicDefaults)) {
-        await this.setStateAsync(
+        await this.setInitialStateAsync(
           `topics.${safeName}.${suffix}`,
           defaultValue,
-          true,
         );
       }
     }
