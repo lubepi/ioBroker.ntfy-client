@@ -2,6 +2,7 @@
 
 const utils = require("@iobroker/adapter-core");
 const axios = require("axios");
+const crypto = require("node:crypto");
 const fs = require("node:fs");
 const path = require("node:path");
 const { EventSource } = require("eventsource");
@@ -30,6 +31,83 @@ class Ntfy extends utils.Adapter {
     this.statsInterval = null;
 
     this.versionCheckTimer = null;
+  }
+
+  getConfiguredAuthType() {
+    return this.config.authType === "user" || this.config.authType === "token"
+      ? this.config.authType
+      : "none";
+  }
+
+  /**
+   * Build a stable signature from server + account related config.
+   *
+   * @returns {string} SHA-256 signature
+   */
+  getServerAccountConfigSignature() {
+    const normalizedUrl = (this.config.url || "https://ntfy.sh").replace(
+      /\/+$/,
+      "",
+    );
+    const authType = this.getConfiguredAuthType();
+
+    const source = {
+      url: normalizedUrl,
+      authType,
+    };
+
+    if (authType === "user") {
+      source.user = this.config.user || "";
+      source.pass = this.config.pass || "";
+    } else if (authType === "token") {
+      source.token = this.config.token || "";
+    }
+
+    return crypto
+      .createHash("sha256")
+      .update(JSON.stringify(source))
+      .digest("hex");
+  }
+
+  /**
+   * Return a log-safe copy of headers.
+   *
+   * @param {Record<string, any>} headers - HTTP headers
+   * @returns {Record<string, any>} Headers without sensitive values
+   */
+  sanitizeHeadersForLog(headers) {
+    const safeHeaders = { ...headers };
+    if (Object.prototype.hasOwnProperty.call(safeHeaders, "Authorization")) {
+      safeHeaders["Authorization"] = "<hidden>";
+    }
+    return safeHeaders;
+  }
+
+  /**
+   * Reset runtime states only when server/account config changed.
+   */
+  async resetRuntimeStatesOnConfigChange() {
+    const currentSignature = this.getServerAccountConfigSignature();
+    const signatureState = await this.getStateAsync("info.configSignature");
+    const previousSignature =
+      signatureState && signatureState.val ? String(signatureState.val) : "";
+
+    if (previousSignature && previousSignature !== currentSignature) {
+      this.log.info(
+        "Server or account configuration changed. Resetting info, stats and topic runtime states.",
+      );
+      await this.resetRuntimeStates();
+    } else if (!previousSignature) {
+      this.log.debug(
+        "No previous server/account configuration signature found. Keeping runtime states.",
+      );
+    } else {
+      this.log.debug(
+        "Server/account configuration unchanged. Keeping runtime states.",
+      );
+    }
+
+    await this.setStateAsync("info.configSignature", currentSignature, true);
   }
 
   /**
@@ -61,11 +139,17 @@ class Ntfy extends utils.Adapter {
         );
       }
     }
+    this.log.debug(
+      `Authentication type configured: ${this.getConfiguredAuthType()}`,
+    );
 
     // Create object structure
     this.log.debug("Creating object structure...");
     await this.createObjectStructure();
     this.log.debug("Object structure created successfully.");
+
+    // Reset volatile runtime states only when server/account config has changed.
+    await this.resetRuntimeStatesOnConfigChange();
 
     // Connection state will be set by checkServerVersion() based on actual health check result
 
@@ -91,6 +175,105 @@ class Ntfy extends utils.Adapter {
     await this.checkServerVersion();
 
     this.log.info("ntfy-client adapter started. Waiting for messages...");
+  }
+
+  /**
+   * Reset all volatile states at startup.
+   */
+  async resetRuntimeStates() {
+    await this.resetInfoStates();
+    await this.resetStatsStates();
+    await this.resetConfiguredTopicStates();
+  }
+
+  /**
+   * Reset info states to defaults.
+   */
+  async resetInfoStates() {
+    await this.setStateAsync("info.connection", false, true);
+    await this.setStateAsync("info.serverVersion", "", true);
+    await this.setStateAsync("info.updateAvailable", false, true);
+    await this.setStateAsync("info.latestVersion", "", true);
+  }
+
+  /**
+   * Reset stats states to defaults.
+   */
+  async resetStatsStates() {
+    const numberStates = [
+      "stats.messages.published",
+      "stats.messages.remaining",
+      "stats.messages.limit",
+      "stats.messages.expiryDuration",
+      "stats.emails.sent",
+      "stats.emails.remaining",
+      "stats.emails.limit",
+      "stats.calls.made",
+      "stats.calls.remaining",
+      "stats.calls.limit",
+      "stats.reservations.count",
+      "stats.reservations.remaining",
+      "stats.reservations.limit",
+      "stats.attachments.storage",
+      "stats.attachments.storageRemaining",
+      "stats.attachments.storageLimit",
+      "stats.attachments.expiryDuration",
+      "stats.attachments.fileSizeLimit",
+      "stats.attachments.bandwidthLimit",
+    ];
+
+    for (const id of numberStates) {
+      await this.setStateAsync(id, 0, true);
+    }
+
+    await this.setStateAsync("stats.account.tier", "", true);
+  }
+
+  /**
+   * Reset message states for configured topics.
+   */
+  async resetConfiguredTopicStates() {
+    const topics = this.config.topics || [];
+    const topicDefaults = {
+      lastMessage: "",
+      lastTitle: "",
+      lastPriority: 0,
+      lastTags: "",
+      lastClick: "",
+      lastAttachmentUrl: "",
+      lastTimestamp: 0,
+      lastMessageId: "",
+      lastSequenceId: "",
+      lastTopic: "",
+      lastEvent: "",
+      lastIcon: "",
+      lastActions: "",
+      lastAttachmentName: "",
+      lastAttachmentType: "",
+      lastAttachmentSize: 0,
+      lastAttachmentExpires: 0,
+      lastExpires: 0,
+      lastJson: "",
+      subscribed: false,
+    };
+
+    for (const topicConfig of topics) {
+      const topicName = topicConfig.topic || topicConfig;
+      if (!topicName) {
+        continue;
+      }
+      const displayName = topicConfig.displayName || "";
+      await this.createTopicStates(topicName, displayName);
+
+      const safeName = this.sanitizeTopicName(topicName);
+      for (const [suffix, defaultValue] of Object.entries(topicDefaults)) {
+        await this.setStateAsync(
+          `topics.${safeName}.${suffix}`,
+          defaultValue,
+          true,
+        );
+      }
+    }
   }
 
   /**
@@ -141,6 +324,19 @@ class Ntfy extends utils.Adapter {
       type: "state",
       common: {
         name: "Latest ntfy server version available",
+        type: "string",
+        role: "text",
+        read: true,
+        write: false,
+        def: "",
+      },
+      native: {},
+    });
+
+    await this.setObjectNotExistsAsync("info.configSignature", {
+      type: "state",
+      common: {
+        name: "Server/account configuration signature",
         type: "string",
         role: "text",
         read: true,
@@ -951,7 +1147,7 @@ class Ntfy extends utils.Adapter {
 
       const account = response.data;
 
-      if (account.role) {
+      if (account.tier !== undefined || account.role !== undefined) {
         await this.setStateAsync(
           "stats.account.tier",
           account.tier !== undefined
@@ -1611,8 +1807,10 @@ class Ntfy extends utils.Adapter {
       this.log.debug(
         `Sending notification to topic "${topic}" (${debugParams.join(", ")})`,
       );
+      const authType = this.getConfiguredAuthType();
+      const safeHeaders = this.sanitizeHeadersForLog(headers);
       this.log.debug(
-        `POST request to ${requestUrl} with headers: ${JSON.stringify(headers)}`,
+        `POST request to ${requestUrl} with headers: ${JSON.stringify(safeHeaders)} (authType: ${authType})`,
       );
       const response = await axios.post(requestUrl, text, {
         headers,
