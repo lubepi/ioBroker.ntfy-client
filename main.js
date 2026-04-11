@@ -6,6 +6,10 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { EventSource } = require("eventsource");
 
+const GENERAL_WARN_LOG_THROTTLE_MS = 30 * 60 * 1000;
+const SSE_ERROR_LOG_THROTTLE_MS = 2 * 60 * 1000;
+const SSE_PARSE_WARN_LOG_THROTTLE_MS = 2 * 60 * 1000;
+
 class Ntfy extends utils.Adapter {
   /**
    * @param {Partial<utils.AdapterOptions>} [options] Options for the adapter
@@ -20,6 +24,8 @@ class Ntfy extends utils.Adapter {
     this.on("unload", this.onUnload.bind(this));
 
     this.subscriptions = new Map();
+    this.warnLogState = new Map();
+    this.sseErrorLogState = new Map();
 
     this.statsInterval = null;
 
@@ -500,6 +506,105 @@ class Ntfy extends utils.Adapter {
   }
 
   /**
+   * Log warnings with throttling to prevent repeated identical entries.
+   *
+   * @param {string} key - Unique key for the warning source
+   * @param {string} message - Warning message to log
+   * @param {number} throttleMs - Throttle window in milliseconds
+   */
+  logWarnThrottled(key, message, throttleMs) {
+    const now = Date.now();
+    const state = this.warnLogState.get(key) || {
+      lastMessage: "",
+      lastWarnTs: 0,
+      suppressedCount: 0,
+    };
+
+    const isSameMessage = state.lastMessage === message;
+    const inThrottleWindow = now - state.lastWarnTs < throttleMs;
+
+    if (isSameMessage && inThrottleWindow) {
+      state.suppressedCount += 1;
+      this.warnLogState.set(key, state);
+      return;
+    }
+
+    const suppressedSuffix =
+      state.suppressedCount > 0
+        ? ` (${state.suppressedCount} similar warnings suppressed)`
+        : "";
+    this.log.warn(`${message}${suppressedSuffix}`);
+
+    state.lastMessage = message;
+    state.lastWarnTs = now;
+    state.suppressedCount = 0;
+    this.warnLogState.set(key, state);
+  }
+
+  /**
+   * Reset warning throttling state for a key.
+   *
+   * @param {string} key - Warning key to reset
+   */
+  resetWarnThrottle(key) {
+    this.warnLogState.delete(key);
+  }
+
+  /**
+   * Log SSE errors with throttling to avoid repeated warnings during outages.
+   *
+   * @param {string} topicName - Topic name
+   * @param {Error|any} error - SSE error object
+   */
+  logSseError(topicName, error) {
+    const errorMessage = error?.message || "Connection error";
+    const now = Date.now();
+
+    const state = this.sseErrorLogState.get(topicName) || {
+      lastErrorMessage: "",
+      lastWarnTs: 0,
+      suppressedCount: 0,
+    };
+
+    const isSameError = state.lastErrorMessage === errorMessage;
+    const inThrottleWindow = now - state.lastWarnTs < SSE_ERROR_LOG_THROTTLE_MS;
+
+    if (isSameError && inThrottleWindow) {
+      state.suppressedCount += 1;
+      this.sseErrorLogState.set(topicName, state);
+      return;
+    }
+
+    const suppressedSuffix =
+      state.suppressedCount > 0
+        ? ` (${state.suppressedCount} similar warnings suppressed)`
+        : "";
+    this.log.warn(
+      `SSE error for topic "${topicName}": ${errorMessage}. Will retry automatically.${suppressedSuffix}`,
+    );
+
+    state.lastErrorMessage = errorMessage;
+    state.lastWarnTs = now;
+    state.suppressedCount = 0;
+    this.sseErrorLogState.set(topicName, state);
+  }
+
+  /**
+   * Log a summary when SSE connection recovered after suppressed errors.
+   *
+   * @param {string} topicName - Topic name
+   */
+  logSseRecovery(topicName) {
+    const state = this.sseErrorLogState.get(topicName);
+    if (state && state.suppressedCount > 0) {
+      this.log.info(
+        `SSE connection restored for topic "${topicName}" (${state.suppressedCount} repeated errors were suppressed).`,
+      );
+    }
+    this.sseErrorLogState.delete(topicName);
+  }
+
+  /**
    * Format the error response data for logging.
    *
    * @param {any} data - The error response data
@@ -671,6 +776,7 @@ class Ntfy extends utils.Adapter {
 
     es.onopen = () => {
       this.log.debug(`SSE connection opened for topic "${topicName}"`);
+      this.logSseRecovery(topicName);
       this.setStateAsync(`topics.${safeName}.subscribed`, true, true);
       this.setStateAsync("info.connection", true, true);
     };
@@ -682,16 +788,16 @@ class Ntfy extends utils.Adapter {
           this.handleIncomingMessage(topicName, data);
         }
       } catch (error) {
-        this.log.warn(
+        this.logWarnThrottled(
+          `sseParse:${topicName}`,
           `Failed to parse SSE message for topic "${topicName}": ${error.message}`,
+          SSE_PARSE_WARN_LOG_THROTTLE_MS,
         );
       }
     });
 
     es.onerror = (error) => {
-      this.log.warn(
-        `SSE error for topic "${topicName}": ${error.message || "Connection error"}. Will retry automatically.`,
-      );
+      this.logSseError(topicName, error);
       this.setStateAsync(`topics.${safeName}.subscribed`, false, true);
     };
 
@@ -830,6 +936,7 @@ class Ntfy extends utils.Adapter {
 
     // Only fetch if authenticated
     if (!authHeaders["Authorization"]) {
+      this.resetWarnThrottle("accountStatsFetchFailed");
       this.log.debug(
         "Skipping account stats fetch - no authentication configured.",
       );
@@ -979,16 +1086,21 @@ class Ntfy extends utils.Adapter {
 
       this.log.debug("Account statistics updated successfully.");
       this.log.debug(`Account data received: ${JSON.stringify(account)}`);
+      this.resetWarnThrottle("accountStatsFetchFailed");
     } catch (error) {
       if (error.response && error.response.status === 401) {
+        this.resetWarnThrottle("accountStatsFetchFailed");
         this.log.debug(
           "Account stats not available - authentication failed or not supported.",
         );
       } else if (error.response && error.response.status === 404) {
+        this.resetWarnThrottle("accountStatsFetchFailed");
         this.log.debug("Account stats endpoint not available on this server.");
       } else {
-        this.log.warn(
+        this.logWarnThrottled(
+          "accountStatsFetchFailed",
           `Failed to fetch account statistics: ${error.message || "Unknown error"}`,
+          GENERAL_WARN_LOG_THROTTLE_MS,
         );
       }
     }
@@ -1012,10 +1124,13 @@ class Ntfy extends utils.Adapter {
 
       if (healthResponse.data && healthResponse.data.healthy) {
         this.log.debug(`Server connection successful! Server is healthy.`);
+        this.resetWarnThrottle("serverHealthCheck");
         await this.setStateAsync("info.connection", true, true);
       } else {
-        this.log.warn(
+        this.logWarnThrottled(
+          "serverHealthCheck",
           `Server health check returned unhealthy status: ${JSON.stringify(healthResponse.data)}`,
+          GENERAL_WARN_LOG_THROTTLE_MS,
         );
         await this.setStateAsync("info.connection", false, true);
       }
@@ -1080,27 +1195,28 @@ class Ntfy extends utils.Adapter {
         }
       }
     } catch (error) {
+      let warningMessage;
       if (error.response) {
         if (error.response.status === 404) {
-          this.log.warn(
-            `Server health check failed (404): No ntfy instance found at this URL. Please verify your Server URL.`,
-          );
+          warningMessage =
+            "Server health check failed (404): No ntfy instance found at this URL. Please verify your Server URL.";
         } else if (error.response.status === 401) {
-          this.log.warn(
-            `Server health check failed (401): Authentication rejected. Please check your Username/Password or Access Token.`,
-          );
+          warningMessage =
+            "Server health check failed (401): Authentication rejected. Please check your Username/Password or Access Token.";
         } else if (error.response.status === 403) {
-          this.log.warn(
-            `Server health check failed (403): Access forbidden. Ensure you have the right permissions.`,
-          );
+          warningMessage =
+            "Server health check failed (403): Access forbidden. Ensure you have the right permissions.";
         } else {
-          this.log.warn(
-            `Server health check failed (${error.response.status}): ${error.message}`,
-          );
+          warningMessage = `Server health check failed (${error.response.status}): ${error.message}`;
         }
       } else {
-        this.log.warn(`Server health check failed: ${error.message}`);
+        warningMessage = `Server health check failed: ${error.message}`;
       }
+      this.logWarnThrottled(
+        "serverHealthCheck",
+        warningMessage,
+        GENERAL_WARN_LOG_THROTTLE_MS,
+      );
       await this.setStateAsync("info.connection", false, true);
 
       // Schedule next check (5 minutes on failure)
@@ -1136,6 +1252,8 @@ class Ntfy extends utils.Adapter {
         es.close();
       }
       this.subscriptions.clear();
+      this.warnLogState.clear();
+      this.sseErrorLogState.clear();
 
       // Clear intervals
       if (this.statsInterval) {
