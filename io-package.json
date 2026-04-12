@@ -1,8 +1,21 @@
 {
   "common": {
     "name": "ntfy-client",
-    "version": "0.1.2",
+    "version": "0.1.3",
     "news": {
+      "0.1.3": {
+        "en": "Refactor: Move internal config signature to local file storage (remove useless object from tree)",
+        "de": "Refactor: Verschieben Sie die interne config-Signatur in den lokalen Dateispeicher (entfernen Sie das nutzlose Objekt aus dem Baum)",
+        "ru": "Рефактор: Переместить внутреннюю конфигурационную подпись в локальное хранилище файлов (удалить бесполезный объект с дерева)",
+        "pt": "Refactor: Mover a assinatura de configuração interna para o armazenamento de ficheiros local (remover o objecto inútil da árvore)",
+        "nl": "Refactor: Verplaats interne configuratie handtekening naar lokale bestandsopslag (verwijder nutteloos object uit boomstructuur)",
+        "fr": "Refactor: Déplacer la signature de configuration interne vers le stockage de fichiers locaux (supprimer l'objet inutile de l'arborescence)",
+        "it": "Refactor: Sposta la firma di configurazione interna all'archiviazione di file locale (rimuovi oggetto inutile dall'albero)",
+        "es": "Refactor: Mueva la firma de config interno al almacenamiento de archivos locales (remover objeto inútil del árbol)",
+        "pl": "Refaktor: Przenieś wewnętrzny podpis konfiguracyjny do lokalnego przechowywania plików (usunąć bezużyteczny obiekt z drzewa)",
+        "uk": "Рефактор: Перемістити внутрішню конфігурацію підпису на локальне сховище файлів (видалення без використання об'єкта з дерева)",
+        "zh-cn": "重构: 将内部配置签名移动到本地文件存储( 从树上删除无用对象)"
+      },
       "0.1.2": {
         "en": "Update axios due to critical security fixes (SSRF, Header Injection)",
         "de": "Aktualisieren von Axios durch kritische Sicherheitskorrekturen (SSRF, Header Injection)",

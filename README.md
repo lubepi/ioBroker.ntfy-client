@@ -275,7 +275,7 @@ Ntfy supports a few variations:
 | `delete`            | Delete a notification by sequence_id                 |
 
 ## Changelog
-### **WORK IN PROGRESS**
+### 0.1.3 (2026-04-12)
 - Refactor: Move internal config signature to local file storage (remove useless object from tree)
 
 ### 0.1.2 (2026-04-12)
