@@ -276,6 +276,11 @@ Ntfy supports a few variations:
 
 ## Changelog
 
+### **WORK IN PROGRESS**
+
+- Reset runtime states on server or account configuration changes.
+- Mask credentials in logs and only log the configured authentication type.
+
 ### 0.1.0
 
 - (lubepi) Initial release with full ntfy.sh support
