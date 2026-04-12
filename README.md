@@ -275,8 +275,7 @@ Ntfy supports a few variations:
 | `delete`            | Delete a notification by sequence_id                 |
 
 ## Changelog
-
-### **WORK IN PROGRESS**
+### 0.1.1 (2026-04-12)
 
 - Reset runtime states on server or account configuration changes.
 - Mask credentials in logs and only log the configured authentication type.

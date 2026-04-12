@@ -1,8 +1,21 @@
 {
   "common": {
     "name": "ntfy-client",
-    "version": "0.1.0",
+    "version": "0.1.1",
     "news": {
+      "0.1.1": {
+        "en": "Reset runtime states on server or account configuration changes.\nMask credentials in logs and only log the configured authentication type.",
+        "de": "Setzen Sie Laufzeitzustände auf Server- oder Kontokonfigurationsänderungen zurück.\nMaskieren Sie Anmeldeinformationen in Protokollen und protokollieren Sie nur den konfigurierten Authentifizierungstyp.",
+        "ru": "Сброс состояния выполнения на сервере или изменение конфигурации учетной записи.\nМаскируйте учетные данные в журналах и регистрируйте только сконфигурированный тип аутентификации.",
+        "pt": "Repor os estados de execução no servidor ou nas alterações de configuração da conta.\nMáscara credenciais em logs e somente log o tipo de autenticação configurado.",
+        "nl": "Reset runtime toestanden op de server of account configuratie wijzigingen.\nMaskergegevens in logs en log alleen het geconfigureerde authenticatietype in.",
+        "fr": "Réinitialiser les états d'exécution sur le serveur ou les modifications de configuration du compte.\nLes identifiants de masque dans les journaux et seulement le type d'authentification configuré.",
+        "it": "Ripristina gli stati di runtime sulle modifiche di configurazione del server o dell'account.\nLe credenziali della maschera nei registri e registrano solo il tipo di autenticazione configurato.",
+        "es": "Reiniciar los estados de tiempo de ejecución en los cambios de configuración de servidor o cuenta.\nLas credenciales de máscara en los registros y sólo registran el tipo de autenticación configurado.",
+        "pl": "Resetuj stany runtime na serwerze lub zmianie konfiguracji konta.\nKwalifikacje maskujące w logach i logowanie tylko skonfigurowanego typu uwierzytelniania.",
+        "uk": "Відновити штати runtime на сервері або зміни конфігурації облікового запису.\nМаска облікових даних в журналах і тільки ввімкніть налаштований тип автентифікації.",
+        "zh-cn": "在服务器或账户配置中重置运行时间状态 .\n在日志中隐藏证书, 并且只记录所配置的认证类型 ."
+      },
       "0.1.0": {
         "en": "Initial implementation of the unofficial ntfy.sh client adapter. Features include: Topics subscription (SSE), account statistics, rich publishing options (Click, Attach, Filename, Email, Call, Actions, etc.), dismiss/delete notifications, and Blockly support.",
         "de": "Erstveröffentlichung des inoffiziellen ntfy.sh client Adapters. Funktionen: Topics abonnieren (SSE), Kontostatistiken, umfangreiche Publishing-Optionen (Click, Attach, Filename, Email, Call, Actions, etc.), Benachrichtigungen verwerfen/löschen und Blockly-Unterstützung.",
