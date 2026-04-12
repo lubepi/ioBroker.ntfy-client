@@ -100,12 +100,26 @@ class Ntfy extends utils.Adapter {
 
   /**
    * Reset runtime states only when server/account config changed.
+   * Signature is stored in a local file in the adapter data directory to avoid cluttering the object tree.
    */
   async resetRuntimeStatesOnConfigChange() {
     const currentSignature = this.getServerAccountConfigSignature();
-    const signatureState = await this.getStateAsync("info.configSignature");
-    const previousSignature =
-      signatureState && signatureState.val ? String(signatureState.val) : "";
+
+    const dataDir = path.join(
+      utils.getAbsoluteDefaultDataDir(),
+      this.namespace,
+    );
+    const signatureFile = path.join(dataDir, "config_signature.json");
+
+    let previousSignature = "";
+    try {
+      if (fs.existsSync(signatureFile)) {
+        const data = JSON.parse(fs.readFileSync(signatureFile, "utf-8"));
+        previousSignature = data.signature || "";
+      }
+    } catch (err) {
+      this.log.debug(`Could not read signature file: ${err.message}`);
+    }
 
     if (previousSignature && previousSignature !== currentSignature) {
       this.log.info(
@@ -122,7 +136,19 @@ class Ntfy extends utils.Adapter {
       );
     }
 
-    await this.setStateAsync("info.configSignature", currentSignature, true);
+    // Persist current signature to file
+    try {
+      if (!fs.existsSync(dataDir)) {
+        fs.mkdirSync(dataDir, { recursive: true });
+      }
+      fs.writeFileSync(
+        signatureFile,
+        JSON.stringify({ signature: currentSignature }),
+        "utf-8",
+      );
+    } catch (err) {
+      this.log.error(`Could not save signature file: ${err.message}`);
+    }
   }
 
   /**
@@ -347,18 +373,6 @@ class Ntfy extends utils.Adapter {
       native: {},
     });
 
-    await this.setObjectNotExistsAsync("info.configSignature", {
-      type: "state",
-      common: {
-        name: "Server/account configuration signature",
-        type: "string",
-        role: "text",
-        read: true,
-        write: false,
-        def: "",
-      },
-      native: {},
-    });
 
     // Account statistics
     const statsStates = [
