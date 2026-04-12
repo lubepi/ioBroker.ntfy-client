@@ -373,7 +373,6 @@ class Ntfy extends utils.Adapter {
       native: {},
     });
 
-
     // Account statistics
     const statsStates = [
       // Message stats
