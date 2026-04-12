@@ -1,8 +1,21 @@
 {
   "common": {
     "name": "ntfy-client",
-    "version": "0.1.1",
+    "version": "0.1.2",
     "news": {
+      "0.1.2": {
+        "en": "Update axios due to critical security fixes (SSRF, Header Injection)",
+        "de": "Aktualisieren von Axios durch kritische Sicherheitskorrekturen (SSRF, Header Injection)",
+        "ru": "Обновление axios из-за критических исправлений безопасности (SSRF, Header Injection)",
+        "pt": "Atualizar axios devido a correções de segurança críticas (SSRF, Header Injection)",
+        "nl": "Axios bijwerken als gevolg van kritieke beveiligingsfixes (SSRF, Header Injection)",
+        "fr": "Mettre à jour axios en raison des corrections de sécurité critiques (SSRF, injection d'en-tête)",
+        "it": "Axios di aggiornamento a causa di correzioni di sicurezza critiche (SSRF, iniezione di intestazione)",
+        "es": "Axios de actualización debido a correcciones de seguridad críticas (SSRF, Header Injection)",
+        "pl": "Uaktualnij aksjos z powodu krytycznych poprawek bezpieczeństwa (SSRF, Header Injection)",
+        "uk": "Update axios через критичні виправлення безпеки (SSRF, ін'єкції Header)",
+        "zh-cn": "关键安全修正(SSRF、信头注射)导致的轴线更新"
+      },
       "0.1.1": {
         "en": "Reset runtime states on server or account configuration changes.\nMask credentials in logs and only log the configured authentication type.",
         "de": "Setzen Sie Laufzeitzustände auf Server- oder Kontokonfigurationsänderungen zurück.\nMaskieren Sie Anmeldeinformationen in Protokollen und protokollieren Sie nur den konfigurierten Authentifizierungstyp.",

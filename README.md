@@ -275,7 +275,7 @@ Ntfy supports a few variations:
 | `delete`            | Delete a notification by sequence_id                 |
 
 ## Changelog
-### **WORK IN PROGRESS**
+### 0.1.2 (2026-04-12)
 - (deps) Update axios due to critical security fixes (SSRF, Header Injection)
 
 ### 0.1.1 (2026-04-12)
