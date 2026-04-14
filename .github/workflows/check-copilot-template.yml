@@ -1,0 +1,109 @@
+name: Check Copilot Template Version
+
+on:
+  schedule:
+    - cron: "23 3 * * 0"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  check-template-version:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Compare local vs upstream template version
+        id: check
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require("node:fs");
+
+            const metadataUrl = "https://raw.githubusercontent.com/DrozmotiX/ioBroker-Copilot-Instructions/main/config/metadata.json";
+            const res = await fetch(metadataUrl);
+            if (!res.ok) {
+              core.setFailed(`Could not fetch template metadata: ${res.status} ${res.statusText}`);
+              return;
+            }
+
+            const metadata = await res.json();
+            const latestVersion = metadata?.template?.version || metadata?.version;
+            if (!latestVersion) {
+              core.setFailed("Could not determine latest template version from metadata.json");
+              return;
+            }
+
+            const localPath = ".github/copilot-instructions.md";
+            if (!fs.existsSync(localPath)) {
+              core.setFailed("Local .github/copilot-instructions.md is missing");
+              return;
+            }
+
+            const localContent = fs.readFileSync(localPath, "utf8");
+            const localMatch = localContent.match(/^Template Version:\s*([0-9]+\.[0-9]+\.[0-9]+)/m);
+            const localVersion = localMatch?.[1] || "";
+            if (!localVersion) {
+              core.setFailed("Template Version not found in .github/copilot-instructions.md");
+              return;
+            }
+
+            const updateNeeded = localVersion !== latestVersion;
+            core.setOutput("latest_version", latestVersion);
+            core.setOutput("local_version", localVersion);
+            core.setOutput("update_needed", String(updateNeeded));
+
+            core.info(`Local template version: ${localVersion}`);
+            core.info(`Latest template version: ${latestVersion}`);
+            core.info(`Update needed: ${updateNeeded}`);
+
+      - name: Create update issue when outdated
+        if: steps.check.outputs.update_needed == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const latestVersion = `${{ steps.check.outputs.latest_version }}`;
+            const localVersion = `${{ steps.check.outputs.local_version }}`;
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+
+            const title = `chore: update Copilot instructions template to v${latestVersion}`;
+
+            const { data: openIssues } = await github.rest.issues.listForRepo({
+              owner,
+              repo,
+              state: "open",
+              per_page: 100,
+            });
+
+            const alreadyOpen = openIssues.some((issue) => issue.title === title);
+            if (alreadyOpen) {
+              core.info(`Issue already exists: ${title}`);
+              return;
+            }
+
+            const body = [
+              "Automated weekly check found an outdated Copilot instructions template.",
+              "",
+              `- Local template version: v${localVersion}`,
+              `- Latest upstream version: v${latestVersion}`,
+              "",
+              "Upstream source:",
+              "- https://github.com/DrozmotiX/ioBroker-Copilot-Instructions",
+              "",
+              "Suggested next step:",
+              "- Update .github/copilot-instructions.md while preserving adapter-specific custom sections.",
+            ].join("\n");
+
+            await github.rest.issues.create({
+              owner,
+              repo,
+              title,
+              body,
+            });
+
+            core.info(`Created issue: ${title}`);
