@@ -45,7 +45,7 @@ jobs:
             }
 
             const localContent = fs.readFileSync(localPath, "utf8");
-            const localMatch = localContent.match(/^Template Version:\s*([0-9]+\.[0-9]+\.[0-9]+)/m);
+            const localMatch = localContent.match(/(?:\*\*Version:\*\*|Template Version:)\s*([0-9]+\.[0-9]+\.[0-9]+)/m);
             const localVersion = localMatch?.[1] || "";
             if (!localVersion) {
               core.setFailed("Template Version not found in .github/copilot-instructions.md");
