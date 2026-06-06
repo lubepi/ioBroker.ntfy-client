@@ -357,6 +357,71 @@ class Ntfy extends utils.Adapter {
    * Create the object structure for states
    */
   async createObjectStructure() {
+    // Folders
+    await this.setObjectNotExistsAsync("stats", {
+      type: "folder",
+      common: {
+        name: "Statistics",
+      },
+      native: {},
+    });
+
+    await this.setObjectNotExistsAsync("stats.account", {
+      type: "folder",
+      common: {
+        name: "Account",
+      },
+      native: {},
+    });
+
+    await this.setObjectNotExistsAsync("stats.messages", {
+      type: "folder",
+      common: {
+        name: "Messages",
+      },
+      native: {},
+    });
+
+    await this.setObjectNotExistsAsync("stats.emails", {
+      type: "folder",
+      common: {
+        name: "Emails",
+      },
+      native: {},
+    });
+
+    await this.setObjectNotExistsAsync("stats.calls", {
+      type: "folder",
+      common: {
+        name: "Calls",
+      },
+      native: {},
+    });
+
+    await this.setObjectNotExistsAsync("stats.reservations", {
+      type: "folder",
+      common: {
+        name: "Reservations",
+      },
+      native: {},
+    });
+
+    await this.setObjectNotExistsAsync("stats.attachments", {
+      type: "folder",
+      common: {
+        name: "Attachments",
+      },
+      native: {},
+    });
+
+    await this.setObjectNotExistsAsync("topics", {
+      type: "folder",
+      common: {
+        name: "Topics",
+      },
+      native: {},
+    });
+
     // Info states
     await this.setObjectNotExistsAsync("info.connection", {
       type: "state",
@@ -500,21 +565,21 @@ class Ntfy extends utils.Adapter {
         id: "stats.attachments.storage",
         name: "Attachment storage used (bytes)",
         type: "number",
-        role: "value.bytes",
+        role: "value",
         unit: "bytes",
       },
       {
         id: "stats.attachments.storageRemaining",
         name: "Attachment storage remaining (bytes)",
         type: "number",
-        role: "value.bytes",
+        role: "value",
         unit: "bytes",
       },
       {
         id: "stats.attachments.storageLimit",
         name: "Attachment storage limit (bytes)",
         type: "number",
-        role: "value.bytes",
+        role: "value",
         unit: "bytes",
       },
       {
@@ -528,14 +593,14 @@ class Ntfy extends utils.Adapter {
         id: "stats.attachments.fileSizeLimit",
         name: "Attachment file size limit (bytes)",
         type: "number",
-        role: "value.bytes",
+        role: "value",
         unit: "bytes",
       },
       {
         id: "stats.attachments.bandwidthLimit",
         name: "Attachment bandwidth limit (bytes)",
         type: "number",
-        role: "value.bytes",
+        role: "value",
         unit: "bytes",
       },
       // Account
@@ -689,7 +754,7 @@ class Ntfy extends utils.Adapter {
         id: `topics.${safeName}.lastAttachmentSize`,
         name: "Last received attachment size",
         type: "number",
-        role: "value.bytes",
+        role: "value",
         unit: "bytes",
       },
       {
