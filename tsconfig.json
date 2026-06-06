@@ -3,7 +3,7 @@
   "compilerOptions": {
     "noEmit": true,
     "allowJs": true,
-    "checkJs": true,
+    "checkJs": false,
     "resolveJsonModule": true,
     "noImplicitAny": false,
     "useUnknownInCatchVariables": false

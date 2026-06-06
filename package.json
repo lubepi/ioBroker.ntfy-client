@@ -56,5 +56,10 @@
   "bugs": {
     "url": "https://github.com/lubepi/ioBroker.ntfy-client/issues"
   },
-  "readmeFilename": "README.md"
+  "readmeFilename": "README.md",
+  "allowScripts": {
+    "esbuild@0.11.23": true,
+    "esbuild@0.25.12": true,
+    "protobufjs@7.5.8": true
+  }
 }
