@@ -41,7 +41,7 @@
     "@iobroker/adapter-dev": "^1.5.0",
     "@iobroker/eslint-config": "^2.3.4",
     "@iobroker/testing": "^5.2.2",
-    "eslint": "^9.22.0",
+    "eslint": "^10.4.1",
     "globals": "^17.6.0"
   },
   "main": "main.js",
