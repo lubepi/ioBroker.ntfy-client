@@ -49,7 +49,7 @@
     "test:package": "mocha test/package --exit",
     "test:integration": "mocha test/integration --exit",
     "test": "npm run test:package && npm run test:integration",
-    "lint": "eslint .",
+    "lint": "eslint --max-warnings 0 .",
     "translate": "translate-adapter",
     "release": "release-script"
   },

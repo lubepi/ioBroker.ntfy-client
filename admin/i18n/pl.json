@@ -1,6 +1,5 @@
 {
     "Access Token": "Token dostępu",
-    "Access Token Auth": "Token dostępu",
     "Authentication": "Uwierzytelnianie",
     "Authentication Type": "Typ uwierzytelniania",
     "Configure topics to subscribe to. The adapter will receive messages from these topics in real-time via SSE (Server-Sent Events).": "Skonfiguruj tematy do subskrypcji. Adapter będzie otrzymywać wiadomości z tych tematów w czasie rzeczywistym za pośrednictwem SSE (Server-Sent Events).",

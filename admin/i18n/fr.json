@@ -1,6 +1,5 @@
 {
     "Access Token": "Jeton d'accès",
-    "Access Token Auth": "Jeton d'accès",
     "Authentication": "Authentification",
     "Authentication Type": "Type d'authentification",
     "Configure topics to subscribe to. The adapter will receive messages from these topics in real-time via SSE (Server-Sent Events).": "Configurez les thèmes à s'abonner. L'adaptateur recevra les messages de ces thèmes en temps réel via SSE (Server-Sent Events).",

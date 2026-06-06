@@ -32,6 +32,8 @@ class Ntfy extends utils.Adapter {
     this.statsInterval = null;
 
     this.versionCheckTimer = null;
+
+    this.isShuttingDown = false;
   }
 
   getConfiguredAuthType() {
@@ -113,12 +115,13 @@ class Ntfy extends utils.Adapter {
 
     let previousSignature = "";
     try {
-      if (fs.existsSync(signatureFile)) {
-        const data = JSON.parse(fs.readFileSync(signatureFile, "utf-8"));
-        previousSignature = data.signature || "";
-      }
+      const fileContent = await fs.promises.readFile(signatureFile, "utf-8");
+      const data = JSON.parse(fileContent);
+      previousSignature = data.signature || "";
     } catch (err) {
-      this.log.debug(`Could not read signature file: ${err.message}`);
+      if (err.code !== "ENOENT") {
+        this.log.debug(`Could not read signature file: ${err.message}`);
+      }
     }
 
     if (previousSignature && previousSignature !== currentSignature) {
@@ -138,10 +141,8 @@ class Ntfy extends utils.Adapter {
 
     // Persist current signature to file
     try {
-      if (!fs.existsSync(dataDir)) {
-        fs.mkdirSync(dataDir, { recursive: true });
-      }
-      fs.writeFileSync(
+      await fs.promises.mkdir(dataDir, { recursive: true });
+      await fs.promises.writeFile(
         signatureFile,
         JSON.stringify({ signature: currentSignature }),
         "utf-8",
@@ -156,66 +157,102 @@ class Ntfy extends utils.Adapter {
    */
   async onReady() {
     this.log.debug("ntfy-client adapter starting...");
+    this.isShuttingDown = false;
 
-    // Validate configuration
-    if (!this.config.url) {
-      this.log.warn(
-        "ntfy Server URL is not configured. Using default: https://ntfy.sh",
+    try {
+      // Validate configuration
+      if (!this.config.url) {
+        this.log.warn(
+          "ntfy Server URL is not configured. Using default: https://ntfy.sh",
+        );
+      } else {
+        this.log.debug(`Using ntfy server URL: ${this.config.url}`);
+      }
+
+      // Validate authentication configuration
+      if (this.config.authType === "user") {
+        if (!this.config.user || !this.config.pass) {
+          this.log.warn(
+            "Basic authentication is selected but username or password is missing.",
+          );
+        }
+      } else if (this.config.authType === "token") {
+        if (!this.config.token) {
+          this.log.warn(
+            "Token authentication is selected but no access token is configured.",
+          );
+        }
+      }
+      this.log.debug(
+        `Authentication type configured: ${this.getConfiguredAuthType()}`,
       );
-    } else {
-      this.log.debug(`Using ntfy server URL: ${this.config.url}`);
-    }
 
-    // Validate authentication configuration
-    if (this.config.authType === "user") {
-      if (!this.config.user || !this.config.pass) {
-        this.log.warn(
-          "Basic authentication is selected but username or password is missing.",
+      // Create object structure
+      this.log.debug("Creating object structure...");
+      await this.createObjectStructure();
+      this.log.debug("Object structure created successfully.");
+
+      // Reset volatile runtime states only when server/account config has changed.
+      await this.resetRuntimeStatesOnConfigChange();
+
+      // Connection state will be set by checkServerVersion() based on actual health check result
+
+      // Subscribe to configured topics
+      this.log.debug("Cleaning up orphaned topics...");
+      await this.cleanupTopics();
+
+      this.log.debug("Subscribing to configured topics...");
+      await this.subscribeToTopics();
+
+      // Fetch account statistics
+      this.log.debug("Fetching account statistics...");
+      await this.fetchAccountStats();
+
+      if (this.isShuttingDown) {
+        this.log.debug("Startup interrupted because adapter is shutting down.");
+        return;
+      }
+
+      // Start periodic stats update (every 15 minutes like HA)
+      this.statsInterval = this.setInterval(
+        () => {
+          void this.fetchAccountStats().catch((error) => {
+            this.logWarnThrottled(
+              "accountStatsInterval",
+              `Scheduled account statistics update failed: ${error.message}`,
+              GENERAL_WARN_LOG_THROTTLE_MS,
+            );
+          });
+        },
+        15 * 60 * 1000,
+      );
+
+      // Check server version (also schedules periodic checks)
+      this.log.debug("Checking server version...");
+      await this.checkServerVersion();
+
+      if (this.isShuttingDown) {
+        this.log.debug("Startup interrupted because adapter is shutting down.");
+        return;
+      }
+
+      this.log.info("ntfy-client adapter started. Waiting for messages...");
+    } catch (error) {
+      if (this.isShuttingDown) {
+        this.log.debug(
+          "Startup sequence ended during shutdown. Suppressing startup error handling.",
+        );
+        return;
+      }
+      this.log.error(`Adapter startup failed: ${error.message || error}`);
+      try {
+        await this.setStateAsync("info.connection", false, true);
+      } catch (stateError) {
+        this.log.debug(
+          `Could not set info.connection after startup failure: ${stateError.message}`,
         );
       }
-    } else if (this.config.authType === "token") {
-      if (!this.config.token) {
-        this.log.warn(
-          "Token authentication is selected but no access token is configured.",
-        );
-      }
     }
-    this.log.debug(
-      `Authentication type configured: ${this.getConfiguredAuthType()}`,
-    );
-
-    // Create object structure
-    this.log.debug("Creating object structure...");
-    await this.createObjectStructure();
-    this.log.debug("Object structure created successfully.");
-
-    // Reset volatile runtime states only when server/account config has changed.
-    await this.resetRuntimeStatesOnConfigChange();
-
-    // Connection state will be set by checkServerVersion() based on actual health check result
-
-    // Subscribe to configured topics
-    this.log.debug("Cleaning up orphaned topics...");
-    await this.cleanupTopics();
-
-    this.log.debug("Subscribing to configured topics...");
-    await this.subscribeToTopics();
-
-    // Fetch account statistics
-    this.log.debug("Fetching account statistics...");
-    await this.fetchAccountStats();
-
-    // Start periodic stats update (every 15 minutes like HA)
-    this.statsInterval = this.setInterval(
-      () => this.fetchAccountStats(),
-      15 * 60 * 1000,
-    );
-
-    // Check server version (also schedules periodic checks)
-    this.log.debug("Checking server version...");
-    await this.checkServerVersion();
-
-    this.log.info("ntfy-client adapter started. Waiting for messages...");
   }
 
   /**
@@ -299,11 +336,11 @@ class Ntfy extends utils.Adapter {
     };
 
     for (const topicConfig of topics) {
-      const topicName = topicConfig.topic || topicConfig;
-      if (!topicName) {
+      const topicInfo = this.normalizeTopicConfig(topicConfig);
+      if (!topicInfo) {
         continue;
       }
-      const displayName = topicConfig.displayName || "";
+      const { topicName, displayName } = topicInfo;
       await this.createTopicStates(topicName, displayName);
 
       const safeName = this.sanitizeTopicName(topicName);
@@ -529,9 +566,12 @@ class Ntfy extends utils.Adapter {
     // Create topic folder structure for subscribed topics
     const topics = this.config.topics || [];
     for (const topicConfig of topics) {
-      const topicName = topicConfig.topic || topicConfig;
-      if (topicName) {
-        await this.createTopicStates(topicName);
+      const topicInfo = this.normalizeTopicConfig(topicConfig);
+      if (topicInfo) {
+        await this.createTopicStates(
+          topicInfo.topicName,
+          topicInfo.displayName,
+        );
       }
     }
   }
@@ -704,7 +744,42 @@ class Ntfy extends utils.Adapter {
    * @returns {string} Sanitized name
    */
   sanitizeTopicName(topicName) {
+    if (typeof topicName !== "string") {
+      return "";
+    }
     return topicName.replace(/[^a-zA-Z0-9_-]/g, "_");
+  }
+
+  /**
+   * Normalize and validate a topic configuration entry.
+   *
+   * @param {any} topicConfig - Topic entry from native config
+   * @returns {{ topicName: string; displayName: string } | null} Normalized topic entry or null if invalid
+   */
+  normalizeTopicConfig(topicConfig) {
+    let topicName = "";
+    let displayName = "";
+
+    if (typeof topicConfig === "string") {
+      topicName = topicConfig;
+    } else if (topicConfig && typeof topicConfig === "object") {
+      if (typeof topicConfig.topic === "string") {
+        topicName = topicConfig.topic;
+      }
+      if (typeof topicConfig.displayName === "string") {
+        displayName = topicConfig.displayName;
+      }
+    }
+
+    topicName = topicName.trim();
+    if (!topicName) {
+      return null;
+    }
+
+    return {
+      topicName,
+      displayName: displayName.trim(),
+    };
   }
 
   /**
@@ -883,11 +958,16 @@ class Ntfy extends utils.Adapter {
    */
   async cleanupTopics() {
     this.log.debug("Starting topic cleanup process...");
-    const currentTopics = (this.config.topics || []).map((t) =>
-      this.sanitizeTopicName(typeof t === "object" ? t.topic : t),
-    );
 
     try {
+      const currentTopics = new Set();
+      for (const topicConfig of this.config.topics || []) {
+        const topicInfo = this.normalizeTopicConfig(topicConfig);
+        if (topicInfo) {
+          currentTopics.add(this.sanitizeTopicName(topicInfo.topicName));
+        }
+      }
+
       // Get all existing topic objects
       const objects = await this.getAdapterObjectsAsync();
       const topicPrefix = `${this.namespace}.topics.`;
@@ -905,7 +985,7 @@ class Ntfy extends utils.Adapter {
 
       // Delete topics that are no longer in config
       for (const topicId of existingTopics) {
-        if (!currentTopics.includes(topicId)) {
+        if (!currentTopics.has(topicId)) {
           this.log.info(
             `Topic "${topicId}" is no longer in configuration. Deleting objects...`,
           );
@@ -931,13 +1011,14 @@ class Ntfy extends utils.Adapter {
     const url = (this.config.url || "https://ntfy.sh").replace(/\/+$/, "");
 
     for (const topicConfig of topics) {
-      const topicName = topicConfig.topic || topicConfig;
-      if (!topicName) {
+      const topicInfo = this.normalizeTopicConfig(topicConfig);
+      if (!topicInfo) {
         continue;
       }
 
+      const { topicName, displayName } = topicInfo;
+
       try {
-        const displayName = topicConfig.displayName || "";
         this.log.debug(
           `Attempting to subscribe to topic: ${topicName} (Display Name: ${displayName || "none"})`,
         );
@@ -962,6 +1043,21 @@ class Ntfy extends utils.Adapter {
     this.log.debug(`Creating SSE subscription for topic "${topicName}"...`);
     const safeName = this.sanitizeTopicName(topicName);
 
+    const existingSubscription = this.subscriptions.get(topicName);
+    if (existingSubscription) {
+      this.log.debug(
+        `Closing existing SSE subscription for topic "${topicName}" before re-subscribing.`,
+      );
+      try {
+        existingSubscription.close();
+      } catch (error) {
+        this.log.debug(
+          `Could not close previous SSE subscription for topic "${topicName}": ${error.message}`,
+        );
+      }
+      this.subscriptions.delete(topicName);
+    }
+
     // Create objects first
     await this.createTopicStates(topicName, displayName);
 
@@ -972,7 +1068,7 @@ class Ntfy extends utils.Adapter {
     let authUrl = sseUrl;
     if (this.config.authType === "token" && this.config.token) {
       // Use official ?token parameter for token auth
-      authUrl += `?token=${this.config.token}`;
+      authUrl += `?token=${encodeURIComponent(this.config.token)}`;
     } else if (
       this.config.authType === "user" &&
       this.config.user &&
@@ -1000,15 +1096,27 @@ class Ntfy extends utils.Adapter {
     es.onopen = () => {
       this.log.debug(`SSE connection opened for topic "${topicName}"`);
       this.logSseRecovery(topicName);
-      this.setStateAsync(`topics.${safeName}.subscribed`, true, true);
-      this.setStateAsync("info.connection", true, true);
+      void Promise.all([
+        this.setStateAsync(`topics.${safeName}.subscribed`, true, true),
+        this.setStateAsync("info.connection", true, true),
+      ]).catch((error) => {
+        this.logWarnThrottled(
+          `sseOpenState:${topicName}`,
+          `Failed to update SSE connection states for topic "${topicName}": ${error.message}`,
+          GENERAL_WARN_LOG_THROTTLE_MS,
+        );
+      });
     };
 
     es.addEventListener("message", (event) => {
       try {
         const data = JSON.parse(event.data);
         if (data.event === "message") {
-          this.handleIncomingMessage(topicName, data);
+          void this.handleIncomingMessage(topicName, data).catch((error) => {
+            this.log.error(
+              `Failed to process incoming message for topic "${topicName}": ${error.message}`,
+            );
+          });
         }
       } catch (error) {
         this.logWarnThrottled(
@@ -1021,7 +1129,15 @@ class Ntfy extends utils.Adapter {
 
     es.onerror = (error) => {
       this.logSseError(topicName, error);
-      this.setStateAsync(`topics.${safeName}.subscribed`, false, true);
+      void this.setStateAsync(
+        `topics.${safeName}.subscribed`,
+        false,
+        true,
+      ).catch((stateError) => {
+        this.log.debug(
+          `Failed to set subscribed=false for topic "${topicName}": ${stateError.message}`,
+        );
+      });
     };
 
     this.log.debug(
@@ -1044,109 +1160,126 @@ class Ntfy extends utils.Adapter {
       `Received message on topic "${topicName}": ${JSON.stringify(data)}`,
     );
 
-    // Any incoming message confirms connection is alive
-    await this.setStateAsync("info.connection", true, true);
+    try {
+      // Any incoming message confirms connection is alive
+      await this.setStateAsync("info.connection", true, true);
 
-    await this.setStateAsync(
-      `topics.${safeName}.lastMessage`,
-      data.message || "",
-      true,
-    );
-    await this.setStateAsync(
-      `topics.${safeName}.lastTitle`,
-      data.title || "",
-      true,
-    );
-    await this.setStateAsync(
-      `topics.${safeName}.lastPriority`,
-      data.priority || 3,
-      true,
-    );
-    await this.setStateAsync(
-      `topics.${safeName}.lastTags`,
-      data.tags ? data.tags.join(",") : "",
-      true,
-    );
-    await this.setStateAsync(
-      `topics.${safeName}.lastClick`,
-      data.click || "",
-      true,
-    );
+      await this.setStateAsync(
+        `topics.${safeName}.lastMessage`,
+        data.message || "",
+        true,
+      );
+      await this.setStateAsync(
+        `topics.${safeName}.lastTitle`,
+        data.title || "",
+        true,
+      );
+      await this.setStateAsync(
+        `topics.${safeName}.lastPriority`,
+        data.priority || 3,
+        true,
+      );
+      await this.setStateAsync(
+        `topics.${safeName}.lastTags`,
+        Array.isArray(data.tags)
+          ? data.tags.join(",")
+          : String(data.tags || ""),
+        true,
+      );
+      await this.setStateAsync(
+        `topics.${safeName}.lastClick`,
+        data.click || "",
+        true,
+      );
 
-    const attachUrl =
-      data.attachment && data.attachment.url ? data.attachment.url : "";
-    await this.setStateAsync(
-      `topics.${safeName}.lastAttachmentUrl`,
-      attachUrl,
-      true,
-    );
-    await this.setStateAsync(
-      `topics.${safeName}.lastTimestamp`,
-      data.time ? data.time * 1000 : Date.now(),
-      true,
-    );
-    await this.setStateAsync(
-      `topics.${safeName}.lastMessageId`,
-      data.id || "",
-      true,
-    );
-    await this.setStateAsync(
-      `topics.${safeName}.lastSequenceId`,
-      data.sequence_id || "",
-      true,
-    );
-    await this.setStateAsync(
-      `topics.${safeName}.lastTopic`,
-      data.topic || "",
-      true,
-    );
-    await this.setStateAsync(
-      `topics.${safeName}.lastEvent`,
-      data.event || "",
-      true,
-    );
-    await this.setStateAsync(
-      `topics.${safeName}.lastIcon`,
-      data.icon || "",
-      true,
-    );
-    await this.setStateAsync(
-      `topics.${safeName}.lastActions`,
-      data.actions ? JSON.stringify(data.actions) : "",
-      true,
-    );
-    await this.setStateAsync(
-      `topics.${safeName}.lastAttachmentName`,
-      data.attachment && data.attachment.name ? data.attachment.name : "",
-      true,
-    );
-    await this.setStateAsync(
-      `topics.${safeName}.lastAttachmentType`,
-      data.attachment && data.attachment.type ? data.attachment.type : "",
-      true,
-    );
-    await this.setStateAsync(
-      `topics.${safeName}.lastAttachmentSize`,
-      data.attachment && data.attachment.size ? data.attachment.size : 0,
-      true,
-    );
-    await this.setStateAsync(
-      `topics.${safeName}.lastAttachmentExpires`,
-      data.attachment && data.attachment.expires
-        ? data.attachment.expires * 1000
-        : 0,
-      true,
-    );
-    await this.setStateAsync(
-      `topics.${safeName}.lastExpires`,
-      data.expires ? data.expires * 1000 : 0,
-      true,
-    );
-    await this.setStateAsync(
-      `topics.${safeName}.lastJson`,
-      JSON.stringify(data),
-      true,
-    );
+      const attachUrl =
+        data.attachment && data.attachment.url ? data.attachment.url : "";
+      await this.setStateAsync(
+        `topics.${safeName}.lastAttachmentUrl`,
+        attachUrl,
+        true,
+      );
+      await this.setStateAsync(
+        `topics.${safeName}.lastTimestamp`,
+        data.time ? data.time * 1000 : Date.now(),
+        true,
+      );
+      await this.setStateAsync(
+        `topics.${safeName}.lastMessageId`,
+        data.id || "",
+        true,
+      );
+      await this.setStateAsync(
+        `topics.${safeName}.lastSequenceId`,
+        data.sequence_id || "",
+        true,
+      );
+      await this.setStateAsync(
+        `topics.${safeName}.lastTopic`,
+        data.topic || "",
+        true,
+      );
+      await this.setStateAsync(
+        `topics.${safeName}.lastEvent`,
+        data.event || "",
+        true,
+      );
+      await this.setStateAsync(
+        `topics.${safeName}.lastIcon`,
+        data.icon || "",
+        true,
+      );
+
+      let actionsStr = "";
+      if (data.actions) {
+        try {
+          actionsStr = JSON.stringify(data.actions);
+        } catch {
+          actionsStr = String(data.actions);
+        }
+      }
+      await this.setStateAsync(
+        `topics.${safeName}.lastActions`,
+        actionsStr,
+        true,
+      );
+      await this.setStateAsync(
+        `topics.${safeName}.lastAttachmentName`,
+        data.attachment && data.attachment.name ? data.attachment.name : "",
+        true,
+      );
+      await this.setStateAsync(
+        `topics.${safeName}.lastAttachmentType`,
+        data.attachment && data.attachment.type ? data.attachment.type : "",
+        true,
+      );
+      await this.setStateAsync(
+        `topics.${safeName}.lastAttachmentSize`,
+        data.attachment && data.attachment.size ? data.attachment.size : 0,
+        true,
+      );
+      await this.setStateAsync(
+        `topics.${safeName}.lastAttachmentExpires`,
+        data.attachment && data.attachment.expires
+          ? data.attachment.expires * 1000
+          : 0,
+        true,
+      );
+      await this.setStateAsync(
+        `topics.${safeName}.lastExpires`,
+        data.expires ? data.expires * 1000 : 0,
+        true,
+      );
+      await this.setStateAsync(
+        `topics.${safeName}.lastJson`,
+        JSON.stringify(data),
+        true,
+      );
+    } catch (error) {
+      this.log.error(
+        `Failed to update states for incoming message on topic "${topicName}" (ID: ${data.id || "unknown"}): ${error.message}`,
+      );
+    }
   }
 
   /**
@@ -1190,57 +1323,57 @@ class Ntfy extends utils.Adapter {
         const limits = account.limits;
         await this.setStateAsync(
           "stats.messages.limit",
-          limits.messages !== undefined ? limits.messages : null,
+          limits.messages !== undefined ? limits.messages : 0,
           true,
         );
         await this.setStateAsync(
           "stats.messages.expiryDuration",
           limits.messages_expiry_duration !== undefined
             ? limits.messages_expiry_duration
-            : null,
+            : 0,
           true,
         );
         await this.setStateAsync(
           "stats.emails.limit",
-          limits.emails !== undefined ? limits.emails : null,
+          limits.emails !== undefined ? limits.emails : 0,
           true,
         );
         await this.setStateAsync(
           "stats.calls.limit",
-          limits.calls !== undefined ? limits.calls : null,
+          limits.calls !== undefined ? limits.calls : 0,
           true,
         );
         await this.setStateAsync(
           "stats.reservations.limit",
-          limits.reservations !== undefined ? limits.reservations : null,
+          limits.reservations !== undefined ? limits.reservations : 0,
           true,
         );
         await this.setStateAsync(
           "stats.attachments.storageLimit",
           limits.attachment_total_size !== undefined
             ? limits.attachment_total_size
-            : null,
+            : 0,
           true,
         );
         await this.setStateAsync(
           "stats.attachments.fileSizeLimit",
           limits.attachment_file_size !== undefined
             ? limits.attachment_file_size
-            : null,
+            : 0,
           true,
         );
         await this.setStateAsync(
           "stats.attachments.expiryDuration",
           limits.attachment_expiry_duration !== undefined
             ? limits.attachment_expiry_duration
-            : null,
+            : 0,
           true,
         );
         await this.setStateAsync(
           "stats.attachments.bandwidthLimit",
           limits.attachment_bandwidth !== undefined
             ? limits.attachment_bandwidth
-            : null,
+            : 0,
           true,
         );
       }
@@ -1249,60 +1382,58 @@ class Ntfy extends utils.Adapter {
         const stats = account.stats;
         await this.setStateAsync(
           "stats.messages.published",
-          stats.messages !== undefined ? stats.messages : null,
+          stats.messages !== undefined ? stats.messages : 0,
           true,
         );
         await this.setStateAsync(
           "stats.messages.remaining",
-          stats.messages_remaining !== undefined
-            ? stats.messages_remaining
-            : null,
+          stats.messages_remaining !== undefined ? stats.messages_remaining : 0,
           true,
         );
         await this.setStateAsync(
           "stats.emails.sent",
-          stats.emails !== undefined ? stats.emails : null,
+          stats.emails !== undefined ? stats.emails : 0,
           true,
         );
         await this.setStateAsync(
           "stats.emails.remaining",
-          stats.emails_remaining !== undefined ? stats.emails_remaining : null,
+          stats.emails_remaining !== undefined ? stats.emails_remaining : 0,
           true,
         );
         await this.setStateAsync(
           "stats.calls.made",
-          stats.calls !== undefined ? stats.calls : null,
+          stats.calls !== undefined ? stats.calls : 0,
           true,
         );
         await this.setStateAsync(
           "stats.calls.remaining",
-          stats.calls_remaining !== undefined ? stats.calls_remaining : null,
+          stats.calls_remaining !== undefined ? stats.calls_remaining : 0,
           true,
         );
         await this.setStateAsync(
           "stats.reservations.count",
-          stats.reservations !== undefined ? stats.reservations : null,
+          stats.reservations !== undefined ? stats.reservations : 0,
           true,
         );
         await this.setStateAsync(
           "stats.reservations.remaining",
           stats.reservations_remaining !== undefined
             ? stats.reservations_remaining
-            : null,
+            : 0,
           true,
         );
         await this.setStateAsync(
           "stats.attachments.storage",
           stats.attachment_total_size !== undefined
             ? stats.attachment_total_size
-            : null,
+            : 0,
           true,
         );
         await this.setStateAsync(
           "stats.attachments.storageRemaining",
           stats.attachment_total_size_remaining !== undefined
             ? stats.attachment_total_size_remaining
-            : null,
+            : 0,
           true,
         );
       }
@@ -1333,6 +1464,9 @@ class Ntfy extends utils.Adapter {
    * Check the ntfy server version and compare with latest available.
    */
   async checkServerVersion() {
+    if (this.isShuttingDown) {
+      return;
+    }
     this.log.debug("Triggering server version and update check...");
     const url = (this.config.url || "https://ntfy.sh").replace(/\/+$/, "");
     const authHeaders = this.getAuthHeaders();
@@ -1440,7 +1574,16 @@ class Ntfy extends utils.Adapter {
         warningMessage,
         GENERAL_WARN_LOG_THROTTLE_MS,
       );
-      await this.setStateAsync("info.connection", false, true);
+
+      if (!this.isShuttingDown) {
+        try {
+          await this.setStateAsync("info.connection", false, true);
+        } catch (stateError) {
+          this.log.debug(
+            `Could not set info.connection after health check failure: ${stateError.message}`,
+          );
+        }
+      }
 
       // Schedule next check (5 minutes on failure)
       this.scheduleNextVersionCheck(5 * 60 * 1000);
@@ -1453,13 +1596,21 @@ class Ntfy extends utils.Adapter {
    * @param {number} ms - Milliseconds until next check
    */
   scheduleNextVersionCheck(ms) {
+    if (this.isShuttingDown) {
+      return;
+    }
     if (this.versionCheckTimer) {
       this.clearTimeout(this.versionCheckTimer);
     }
-    this.versionCheckTimer = this.setTimeout(
-      () => this.checkServerVersion(),
-      ms,
-    );
+    this.versionCheckTimer = this.setTimeout(() => {
+      void this.checkServerVersion().catch((error) => {
+        this.logWarnThrottled(
+          "serverVersionTimer",
+          `Scheduled server version check failed: ${error.message}`,
+          GENERAL_WARN_LOG_THROTTLE_MS,
+        );
+      });
+    }, ms);
   }
 
   /**
@@ -1469,6 +1620,8 @@ class Ntfy extends utils.Adapter {
    */
   onUnload(callback) {
     try {
+      this.isShuttingDown = true;
+
       // Close all SSE subscriptions
       for (const [topicName, es] of this.subscriptions) {
         this.log.debug(`Closing subscription for topic "${topicName}"`);
@@ -1502,58 +1655,232 @@ class Ntfy extends utils.Adapter {
    * @param {ioBroker.Message} obj The message object
    */
   async onMessage(obj) {
-    if (typeof obj === "object" && obj.message) {
-      try {
-        let result;
-        switch (obj.command) {
-          case "send":
-            result = await this.sendNotification(obj.message);
-            break;
-          case "publish":
-            result = await this.sendNotification(obj.message);
-            break;
-          case "clear":
-          case "dismiss":
-            result = await this.dismissNotification(obj.message);
-            break;
-          case "delete":
-            result = await this.deleteNotification(obj.message);
-            break;
-          default:
-            this.log.warn(`Unknown command: ${obj.command}`);
-            if (obj.callback) {
-              this.sendTo(
-                obj.from,
-                obj.command,
-                { error: `Unknown command: ${obj.command}` },
-                obj.callback,
-              );
-            }
-            return;
-        }
+    if (
+      !obj ||
+      typeof obj !== "object" ||
+      !Object.prototype.hasOwnProperty.call(obj, "message")
+    ) {
+      return;
+    }
 
-        if (obj.callback) {
-          this.sendTo(
-            obj.from,
-            obj.command,
-            { success: true, ...result },
-            obj.callback,
-          );
-        }
-      } catch (error) {
-        this.log.error(
-          `Failed to execute command "${obj.command}": ${error.message}`,
+    try {
+      let result;
+      switch (obj.command) {
+        case "send":
+          result = await this.sendNotification(obj.message);
+          break;
+        case "publish":
+          result = await this.sendNotification(obj.message);
+          break;
+        case "clear":
+        case "dismiss":
+          result = await this.dismissNotification(obj.message);
+          break;
+        case "delete":
+          result = await this.deleteNotification(obj.message);
+          break;
+        default:
+          this.log.warn(`Unknown command: ${obj.command}`);
+          if (obj.callback) {
+            this.sendTo(
+              obj.from,
+              obj.command,
+              { error: `Unknown command: ${obj.command}` },
+              obj.callback,
+            );
+          }
+          return;
+      }
+
+      if (obj.callback) {
+        this.sendTo(
+          obj.from,
+          obj.command,
+          { success: true, ...result },
+          obj.callback,
         );
-        if (obj.callback) {
-          this.sendTo(
-            obj.from,
-            obj.command,
-            { error: error.message },
-            obj.callback,
-          );
-        }
+      }
+    } catch (error) {
+      this.log.error(
+        `Failed to execute command "${obj.command}": ${error.message}`,
+      );
+      if (obj.callback) {
+        this.sendTo(
+          obj.from,
+          obj.command,
+          { error: error.message },
+          obj.callback,
+        );
       }
     }
+  }
+
+  /**
+   * Check if a value is truthy in the ntfy boolean sense.
+   *
+   * @param {*} val Value to check
+   * @returns {boolean} Whether the value is truthy
+   */
+  isTruthy(val) {
+    return val === true || val === "true" || val === "yes" || val === "1";
+  }
+
+  /**
+   * Build common notification headers from options.
+   * Used by both sendNotification and sendWithFileAttachment.
+   *
+   * @param {object} opts Notification options
+   * @returns {Record<string, string>} Headers object
+   */
+  buildCommonHeaders(opts) {
+    const headers = {};
+    if (opts.title) {
+      headers["Title"] = opts.title;
+    }
+    if (opts.priority) {
+      headers["Priority"] = opts.priority.toString();
+    }
+    if (opts.tags) {
+      headers["Tags"] = Array.isArray(opts.tags)
+        ? opts.tags.join(",")
+        : opts.tags;
+    }
+    if (opts.click) {
+      headers["Click"] = opts.click;
+    }
+    if (opts.filename) {
+      headers["Filename"] = opts.filename;
+    }
+    if (opts.actions) {
+      headers["Actions"] =
+        typeof opts.actions === "object"
+          ? JSON.stringify(opts.actions)
+          : opts.actions;
+    }
+    if (opts.markdown) {
+      headers["Markdown"] = "yes";
+    }
+    if (opts.delay) {
+      headers["Delay"] = opts.delay;
+    }
+    if (opts.email) {
+      headers["Email"] = opts.email;
+    }
+    if (opts.call) {
+      headers["Call"] = opts.call;
+    }
+    if (opts.icon) {
+      headers["Icon"] = opts.icon;
+    }
+    if (opts.sequenceId) {
+      headers["Sequence-ID"] = opts.sequenceId;
+    }
+    if (this.isTruthy(opts.disableCache)) {
+      headers["Cache"] = "no";
+    }
+    if (this.isTruthy(opts.disableFirebase)) {
+      headers["Firebase"] = "no";
+    }
+    if (
+      opts.unifiedPush === true ||
+      opts.unifiedPush === "true" ||
+      opts.unifiedPush === "1"
+    ) {
+      headers["UnifiedPush"] = "1";
+    }
+    return headers;
+  }
+
+  /**
+   * Build an array of debug parameter strings for logging.
+   * Used by both sendNotification and sendWithFileAttachment.
+   *
+   * @param {object} opts Notification options
+   * @returns {string[]} Array of formatted debug strings
+   */
+  buildDebugParams(opts) {
+    const params = [];
+    if (opts.text) {
+      params.push(`Message: "${opts.text}"`);
+    }
+    if (opts.title) {
+      params.push(`Title: "${opts.title}"`);
+    }
+    if (opts.priority) {
+      params.push(`Priority: "${opts.priority}"`);
+    }
+    if (opts.tags) {
+      params.push(`Tags: "${opts.tags}"`);
+    }
+    if (opts.click) {
+      params.push(`Click: "${opts.click}"`);
+    }
+    if (opts.attach) {
+      params.push(`Attach: "${opts.attach}"`);
+    }
+    if (opts.filename) {
+      params.push(`Filename: "${opts.filename}"`);
+    }
+    if (opts.actions) {
+      params.push(
+        `Actions: "${typeof opts.actions === "object" ? JSON.stringify(opts.actions) : opts.actions}"`,
+      );
+    }
+    if (opts.markdown) {
+      params.push(`Markdown: "yes"`);
+    }
+    if (opts.delay) {
+      params.push(`Delay: "${opts.delay}"`);
+    }
+    if (opts.email) {
+      params.push(`Email: "${opts.email}"`);
+    }
+    if (opts.call) {
+      params.push(`Call: "${opts.call}"`);
+    }
+    if (opts.icon) {
+      params.push(`Icon: "${opts.icon}"`);
+    }
+    if (opts.sequenceId) {
+      params.push(`Sequence-ID: "${opts.sequenceId}"`);
+    }
+    if (this.isTruthy(opts.disableCache)) {
+      params.push(`Cache: "no"`);
+    }
+    if (this.isTruthy(opts.disableFirebase)) {
+      params.push(`Firebase: "no"`);
+    }
+    if (
+      opts.unifiedPush === true ||
+      opts.unifiedPush === "true" ||
+      opts.unifiedPush === "1"
+    ) {
+      params.push(`UnifiedPush: "1"`);
+    }
+    if (opts.template) {
+      params.push(`Template: "${opts.template}"`);
+    }
+    return params;
+  }
+
+  /**
+   * Build a request URL with template query parameter if applicable.
+   *
+   * @param {string} endpoint Base endpoint URL
+   * @param {*} template Template value
+   * @returns {string} Request URL with optional tpl parameter
+   */
+  buildTemplateUrl(endpoint, template) {
+    if (
+      template !== undefined &&
+      template !== null &&
+      template !== "" &&
+      template !== false
+    ) {
+      const tplVal = this.isTruthy(template) ? "yes" : template;
+      return `${endpoint}${endpoint.includes("?") ? "&" : "?"}tpl=${tplVal}`;
+    }
+    return endpoint;
   }
 
   /**
@@ -1588,7 +1915,7 @@ class Ntfy extends utils.Adapter {
 
     if (typeof msgObj === "string") {
       text = msgObj;
-    } else if (typeof msgObj === "object") {
+    } else if (msgObj && typeof msgObj === "object") {
       text = msgObj.message || "";
       topic = msgObj.topic || "";
       title = msgObj.title || "";
@@ -1628,6 +1955,28 @@ class Ntfy extends utils.Adapter {
       throw new Error("Topic is required to send a notification.");
     }
 
+    // Validate priority value
+    if (
+      priority &&
+      ![
+        "1",
+        "2",
+        "3",
+        "4",
+        "5",
+        "min",
+        "low",
+        "default",
+        "high",
+        "max",
+        "urgent",
+      ].includes(priority.toString().toLowerCase())
+    ) {
+      this.log.warn(
+        `Invalid priority value: "${priority}". Valid values are 1-5 or min/low/default/high/max/urgent.`,
+      );
+    }
+
     const url = (this.config.url || "https://ntfy.sh").replace(/\/+$/, "");
 
     if (attach && attachFile) {
@@ -1638,7 +1987,7 @@ class Ntfy extends utils.Adapter {
 
     // If attach_file is specified, use PUT method with file upload
     if (attachFile) {
-      return await this.sendWithFileAttachment(
+      return await this.sendWithFileAttachment({
         url,
         topic,
         text,
@@ -1658,94 +2007,40 @@ class Ntfy extends utils.Adapter {
         disableFirebase,
         unifiedPush,
         template,
-        attachFile,
+        filePath: attachFile,
         jsonData,
-      );
+      });
     }
 
     const endpoint = `${url}/${encodeURIComponent(topic)}`;
     this.log.debug(`Sending notification to endpoint: ${endpoint}`);
 
-    const headers = {};
+    const headers = this.buildCommonHeaders({
+      title,
+      priority,
+      tags,
+      click,
+      filename,
+      actions,
+      markdown,
+      delay,
+      email,
+      call,
+      icon,
+      sequenceId,
+      disableCache,
+      disableFirebase,
+      unifiedPush,
+    });
 
-    if (title) {
-      headers["Title"] = title;
-    }
-    if (priority) {
-      headers["Priority"] = priority.toString();
-    }
-    if (tags) {
-      headers["Tags"] = Array.isArray(tags) ? tags.join(",") : tags;
-    }
-    if (click) {
-      headers["Click"] = click;
-    }
     if (attach) {
       headers["Attach"] = attach;
     }
-    if (filename) {
-      headers["Filename"] = filename;
-    }
-    if (actions) {
-      headers["Actions"] =
-        typeof actions === "object" ? JSON.stringify(actions) : actions;
-    }
-    if (markdown) {
-      headers["Markdown"] = "yes";
-    }
-    if (delay) {
-      headers["Delay"] = delay;
-    }
-    if (email) {
-      headers["Email"] = email;
-    }
-    if (call) {
-      headers["Call"] = call;
-    }
-    if (icon) {
-      headers["Icon"] = icon;
-    }
-    if (sequenceId) {
-      headers["Sequence-ID"] = sequenceId;
-    }
-
-    if (
-      disableCache === true ||
-      disableCache === "true" ||
-      disableCache === "yes" ||
-      disableCache === "1"
-    ) {
-      headers["Cache"] = "no";
-    }
-    if (
-      disableFirebase === true ||
-      disableFirebase === "true" ||
-      disableFirebase === "yes" ||
-      disableFirebase === "1"
-    ) {
-      headers["Firebase"] = "no";
-    }
-    if (unifiedPush === true || unifiedPush === "true" || unifiedPush === "1") {
-      headers["UnifiedPush"] = "1";
-    }
 
     // Template query param (yes/true/1 for manual, or a name like 'github')
-    let requestUrl = endpoint;
-    if (
-      template !== undefined &&
-      template !== null &&
-      template !== "" &&
-      template !== false
-    ) {
-      const tplVal =
-        template === true ||
-        template === "true" ||
-        template === "yes" ||
-        template === "1"
-          ? "yes"
-          : template;
-      requestUrl += `${requestUrl.includes("?") ? "&" : "?"}tpl=${tplVal}`;
+    let requestUrl = this.buildTemplateUrl(endpoint, template);
 
+    if (requestUrl !== endpoint && template) {
       // If separate data is provided, use it as body and message as header template
       if (jsonData) {
         if (text) {
@@ -1761,75 +2056,26 @@ class Ntfy extends utils.Adapter {
     Object.assign(headers, authHeaders);
 
     try {
-      const debugParams = [];
-      if (title) {
-        debugParams.push(`Title: "${title}"`);
-      }
-      debugParams.push(`Message: "${text}"`);
-      if (priority) {
-        debugParams.push(`Priority: "${priority}"`);
-      }
-      if (tags) {
-        debugParams.push(`Tags: "${tags}"`);
-      }
-      if (click) {
-        debugParams.push(`Click: "${click}"`);
-      }
-      if (attach) {
-        debugParams.push(`Attach: "${attach}"`);
-      }
-      if (filename) {
-        debugParams.push(`Filename: "${filename}"`);
-      }
-      if (actions) {
-        debugParams.push(
-          `Actions: "${typeof actions === "object" ? JSON.stringify(actions) : actions}"`,
-        );
-      }
-      if (markdown) {
-        debugParams.push(`Markdown: "yes"`);
-      }
-      if (delay) {
-        debugParams.push(`Delay: "${delay}"`);
-      }
-      if (email) {
-        debugParams.push(`Email: "${email}"`);
-      }
-      if (call) {
-        debugParams.push(`Call: "${call}"`);
-      }
-      if (icon) {
-        debugParams.push(`Icon: "${icon}"`);
-      }
-      if (sequenceId) {
-        debugParams.push(`Sequence-ID: "${sequenceId}"`);
-      }
-      if (
-        disableCache === true ||
-        disableCache === "true" ||
-        disableCache === "yes" ||
-        disableCache === "1"
-      ) {
-        debugParams.push(`Cache: "no"`);
-      }
-      if (
-        disableFirebase === true ||
-        disableFirebase === "true" ||
-        disableFirebase === "yes" ||
-        disableFirebase === "1"
-      ) {
-        debugParams.push(`Firebase: "no"`);
-      }
-      if (
-        unifiedPush === true ||
-        unifiedPush === "true" ||
-        unifiedPush === "1"
-      ) {
-        debugParams.push(`UnifiedPush: "1"`);
-      }
-      if (template) {
-        debugParams.push(`Template: "${template}"`);
-      }
+      const debugParams = this.buildDebugParams({
+        text,
+        title,
+        priority,
+        tags,
+        click,
+        attach,
+        filename,
+        actions,
+        markdown,
+        delay,
+        email,
+        call,
+        icon,
+        sequenceId,
+        disableCache,
+        disableFirebase,
+        unifiedPush,
+        template,
+      });
 
       this.log.debug(
         `Sending notification to topic "${topic}" (${debugParams.join(", ")})`,
@@ -1876,52 +2122,56 @@ class Ntfy extends utils.Adapter {
   /**
    * Send a notification with a local file attachment via PUT.
    *
-   * @param {string} url Server URL
-   * @param {string} topic Topic name
-   * @param {string} text Message text
-   * @param {string} title Title
-   * @param {string} priority Priority
-   * @param {string} tags Tags
-   * @param {string} click Click URL
-   * @param {string} filename Filename
-   * @param {string|object} actions Actions
-   * @param {boolean} markdown Markdown enabled
-   * @param {string} delay Delay
-   * @param {string} email Email
-   * @param {string} call Call
-   * @param {string} icon Icon URL
-   * @param {string} sequenceId Sequence ID
-   * @param {string|boolean} disableCache Disable server-side caching
-   * @param {string|boolean} disableFirebase Disable Firebase Cloud Messaging
-   * @param {string} unifiedPush UnifiedPush control
-   * @param {string} template Template control
-   * @param {string} filePath Path to the file to attach
-   * @param {string|object} [jsonData] JSON data for templating
+   * @param {object} opts Notification options
+   * @param {string} opts.url Server URL
+   * @param {string} opts.topic Topic name
+   * @param {string} opts.text Message text
+   * @param {string} opts.title Title
+   * @param {string} opts.priority Priority
+   * @param {string} opts.tags Tags
+   * @param {string} opts.click Click URL
+   * @param {string} opts.filename Filename
+   * @param {string|object} opts.actions Actions
+   * @param {boolean} opts.markdown Markdown enabled
+   * @param {string} opts.delay Delay
+   * @param {string} opts.email Email
+   * @param {string} opts.call Call
+   * @param {string} opts.icon Icon URL
+   * @param {string} opts.sequenceId Sequence ID
+   * @param {string|boolean} opts.disableCache Disable server-side caching
+   * @param {string|boolean} opts.disableFirebase Disable Firebase Cloud Messaging
+   * @param {string} opts.unifiedPush UnifiedPush control
+   * @param {string} opts.template Template control
+   * @param {string} opts.filePath Path to the file to attach
+   * @param {string|object} [opts.jsonData] JSON data for templating
    * @returns {Promise<object>} The response data
    */
-  async sendWithFileAttachment(
-    url,
-    topic,
-    text,
-    title,
-    priority,
-    tags,
-    click,
-    filename,
-    actions,
-    markdown,
-    delay,
-    email,
-    call,
-    icon,
-    sequenceId,
-    disableCache,
-    disableFirebase,
-    unifiedPush,
-    template,
-    filePath,
-    jsonData,
-  ) {
+  async sendWithFileAttachment(opts) {
+    const {
+      url,
+      topic,
+      text,
+      title,
+      priority,
+      tags,
+      click,
+      actions,
+      markdown,
+      delay,
+      email,
+      call,
+      icon,
+      sequenceId,
+      disableCache,
+      disableFirebase,
+      unifiedPush,
+      template,
+      filePath,
+      jsonData,
+    } = opts;
+
+    let { filename } = opts;
+
     this.log.debug(`sendWithFileAttachment called for file: ${filePath}`);
     const endpoint = `${url}/${encodeURIComponent(topic)}`;
     this.log.debug(`Sending file attachment to endpoint: ${endpoint}`);
@@ -1933,7 +2183,7 @@ class Ntfy extends utils.Adapter {
 
     // Check if the file size exceeds the server's limits if stats are available
     try {
-      const fileStats = fs.statSync(filePath);
+      const fileStats = await fs.promises.stat(filePath);
       const fileSize = fileStats.size;
 
       const storageRemainingState = await this.getStateAsync(
@@ -1968,94 +2218,42 @@ class Ntfy extends utils.Adapter {
         }
       }
     } catch (e) {
-      if (e.message.includes("exceeds")) {
+      const errorMessage = e?.message || String(e);
+      if (errorMessage.includes("exceeds")) {
         throw e;
       }
-      this.log.debug(`Could not pre-check file limits: ${e.message}`);
+      this.log.debug(`Could not pre-check file limits: ${errorMessage}`);
     }
 
     const headers = {
       "Content-Type": "application/octet-stream",
+      ...this.buildCommonHeaders({
+        title,
+        priority,
+        tags,
+        click,
+        filename,
+        actions,
+        markdown,
+        delay,
+        email,
+        call,
+        icon,
+        sequenceId,
+        disableCache,
+        disableFirebase,
+        unifiedPush,
+      }),
     };
 
-    if (filename) {
-      headers["Filename"] = filename;
-    }
     if (text) {
       headers["Message"] = text;
     }
-    if (title) {
-      headers["Title"] = title;
-    }
-    if (priority) {
-      headers["Priority"] = priority.toString();
-    }
-    if (tags) {
-      headers["Tags"] = Array.isArray(tags) ? tags.join(",") : tags;
-    }
-    if (click) {
-      headers["Click"] = click;
-    }
-    if (actions) {
-      headers["Actions"] =
-        typeof actions === "object" ? JSON.stringify(actions) : actions;
-    }
-    if (markdown) {
-      headers["Markdown"] = "yes";
-    }
-    if (delay) {
-      headers["Delay"] = delay;
-    }
-    if (email) {
-      headers["Email"] = email;
-    }
-    if (call) {
-      headers["Call"] = call;
-    }
-    if (icon) {
-      headers["Icon"] = icon;
-    }
-    if (sequenceId) {
-      headers["Sequence-ID"] = sequenceId;
-    }
-
-    if (
-      disableCache === true ||
-      disableCache === "true" ||
-      disableCache === "yes" ||
-      disableCache === "1"
-    ) {
-      headers["Cache"] = "no";
-    }
-    if (
-      disableFirebase === true ||
-      disableFirebase === "true" ||
-      disableFirebase === "yes" ||
-      disableFirebase === "1"
-    ) {
-      headers["Firebase"] = "no";
-    }
-    if (unifiedPush === true || unifiedPush === "true" || unifiedPush === "1") {
-      headers["UnifiedPush"] = "1";
-    }
 
     // Template query param (yes/true/1 for manual, or a name like 'github')
-    let requestUrl = endpoint;
-    if (
-      template !== undefined &&
-      template !== null &&
-      template !== "" &&
-      template !== false
-    ) {
-      const tplVal =
-        template === true ||
-        template === "true" ||
-        template === "yes" ||
-        template === "1"
-          ? "yes"
-          : template;
-      requestUrl += `${requestUrl.includes("?") ? "&" : "?"}tpl=${tplVal}`;
+    const requestUrl = this.buildTemplateUrl(endpoint, template);
 
+    if (requestUrl !== endpoint && template) {
       // If separate data is provided, use it as headers (X-...) for file uploads
       if (jsonData && typeof jsonData === "object") {
         for (const [key, value] of Object.entries(jsonData)) {
@@ -2075,77 +2273,31 @@ class Ntfy extends utils.Adapter {
     Object.assign(headers, authHeaders);
 
     try {
-      const debugFileParams = [];
-      if (text) {
-        debugFileParams.push(`Message: "${text}"`);
-      }
-      if (title) {
-        debugFileParams.push(`Title: "${title}"`);
-      }
-      if (priority) {
-        debugFileParams.push(`Priority: "${priority}"`);
-      }
-      if (tags) {
-        debugFileParams.push(`Tags: "${tags}"`);
-      }
-      if (click) {
-        debugFileParams.push(`Click: "${click}"`);
-      }
-      if (actions) {
-        debugFileParams.push(
-          `Actions: "${typeof actions === "object" ? JSON.stringify(actions) : actions}"`,
-        );
-      }
-      if (markdown) {
-        debugFileParams.push(`Markdown: "yes"`);
-      }
-      if (delay) {
-        debugFileParams.push(`Delay: "${delay}"`);
-      }
-      if (email) {
-        debugFileParams.push(`Email: "${email}"`);
-      }
-      if (call) {
-        debugFileParams.push(`Call: "${call}"`);
-      }
-      if (icon) {
-        debugFileParams.push(`Icon: "${icon}"`);
-      }
-      if (sequenceId) {
-        debugFileParams.push(`Sequence-ID: "${sequenceId}"`);
-      }
-      if (
-        disableCache === true ||
-        disableCache === "true" ||
-        disableCache === "yes" ||
-        disableCache === "1"
-      ) {
-        debugFileParams.push(`Cache: "no"`);
-      }
-      if (
-        disableFirebase === true ||
-        disableFirebase === "true" ||
-        disableFirebase === "yes" ||
-        disableFirebase === "1"
-      ) {
-        debugFileParams.push(`Firebase: "no"`);
-      }
-      if (
-        unifiedPush === true ||
-        unifiedPush === "true" ||
-        unifiedPush === "1"
-      ) {
-        debugFileParams.push(`UnifiedPush: "1"`);
-      }
-      if (template) {
-        debugFileParams.push(`Template: "${template}"`);
-      }
+      const debugFileParams = this.buildDebugParams({
+        text,
+        title,
+        priority,
+        tags,
+        click,
+        filename,
+        actions,
+        markdown,
+        delay,
+        email,
+        call,
+        icon,
+        sequenceId,
+        disableCache,
+        disableFirebase,
+        unifiedPush,
+        template,
+      });
 
       this.log.debug(
         `Sending file attachment "${filename}" to topic "${topic}" (${debugFileParams.join(", ")})`,
       );
       this.log.debug(`Reading file: ${filePath}`);
-      const fileData = fs.readFileSync(filePath);
+      const fileData = await fs.promises.readFile(filePath);
       this.log.debug(`File size: ${fileData.length} bytes`);
       const response = await axios.put(requestUrl, fileData, {
         headers,
@@ -2197,7 +2349,7 @@ class Ntfy extends utils.Adapter {
     let topic = "";
     let messageOrSequenceId = "";
 
-    if (typeof msgObj === "object") {
+    if (msgObj && typeof msgObj === "object") {
       topic = msgObj.topic || "";
       messageOrSequenceId = msgObj.sequence_id || "";
     } else {
@@ -2263,7 +2415,7 @@ class Ntfy extends utils.Adapter {
     let topic = "";
     let messageOrSequenceId = "";
 
-    if (typeof msgObj === "object") {
+    if (msgObj && typeof msgObj === "object") {
       topic = msgObj.topic || "";
       messageOrSequenceId = msgObj.sequence_id || "";
     } else {

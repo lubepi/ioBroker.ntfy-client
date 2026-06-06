@@ -39,6 +39,19 @@ export default [
     },
   },
   {
+    files: ["test/**/*.js"],
+    languageOptions: {
+      globals: {
+        describe: "readonly",
+        it: "readonly",
+        before: "readonly",
+        beforeEach: "readonly",
+        after: "readonly",
+        afterEach: "readonly",
+      },
+    },
+  },
+  {
     ignores: ["node_modules/", "admin/i18n/", ".vscode/"],
   },
 ];

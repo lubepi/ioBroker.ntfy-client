@@ -276,18 +276,16 @@ Ntfy supports a few variations:
 
 ## Changelog
 ### 0.1.3 (2026-04-12)
-- Refactor: Move internal config signature to local file storage (remove useless object from tree)
+- (lubepi) Refactor: Move internal config signature to local file storage (remove useless object from tree)
 
 ### 0.1.2 (2026-04-12)
-- (deps) Update axios due to critical security fixes (SSRF, Header Injection)
+- (lubepi) Update axios due to critical security fixes (SSRF, Header Injection)
 
 ### 0.1.1 (2026-04-12)
+- (lubepi) Reset runtime states on server or account configuration changes
+- (lubepi) Mask credentials in logs and only log the configured authentication type
 
-- Reset runtime states on server or account configuration changes.
-- Mask credentials in logs and only log the configured authentication type.
-
-### 0.1.0
-
+### 0.1.0 (2026-04-12)
 - (lubepi) Initial release with full ntfy.sh support
 - Subscribe to topics via SSE (receive messages in real-time)
 - Publish notifications with all ntfy parameters (title, priority, tags, click, attach, actions, markdown, delay, email, call, icon, sequence_id, disable_cache, disable_firebase, unified_push, template)
