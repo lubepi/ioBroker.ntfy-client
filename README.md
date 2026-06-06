@@ -297,6 +297,12 @@ Ntfy supports a few variations:
 - Blockly blocks for sending and managing notifications
 - Full i18n support (en, de, ru, pt, nl, fr, it, es, pl, uk, zh-cn)
 
+[Older changes can be found here](CHANGELOG_OLD.md)
+
+## Legal Notice
+
+This adapter is **NOT** an official product of ntfy LLC. The name **ntfy**, the logo and branding are trademarks of ntfy LLC. This adapter is a community project to provide integration into ioBroker.
+
 ## License
 
 MIT License
@@ -320,7 +326,3 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-
-## Legal Notice
-
-This adapter is **NOT** an official product of ntfy LLC. The name **ntfy**, the logo and branding are trademarks of ntfy LLC. This adapter is a community project to provide integration into ioBroker.

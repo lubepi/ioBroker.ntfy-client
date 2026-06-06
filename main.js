@@ -1,11 +1,11 @@
-"use strict";
+'use strict';
 
-const utils = require("@iobroker/adapter-core");
-const axios = require("axios");
-const crypto = require("node:crypto");
-const fs = require("node:fs");
-const path = require("node:path");
-const { EventSource } = require("eventsource");
+const utils = require('@iobroker/adapter-core');
+const axios = require('axios');
+const crypto = require('node:crypto');
+const fs = require('node:fs');
+const path = require('node:path');
+const { EventSource } = require('eventsource');
 
 const GENERAL_WARN_LOG_THROTTLE_MS = 30 * 60 * 1000;
 const SSE_ERROR_LOG_THROTTLE_MS = 2 * 60 * 1000;
@@ -13,2536 +13,2244 @@ const SSE_PARSE_WARN_LOG_THROTTLE_MS = 2 * 60 * 1000;
 const STATE_QUALITY_INITIAL = 0x20;
 
 class Ntfy extends utils.Adapter {
-  /**
-   * @param {Partial<utils.AdapterOptions>} [options] Options for the adapter
-   */
-  constructor(options) {
-    super({
-      ...options,
-      name: "ntfy-client",
-    });
-    this.on("ready", this.onReady.bind(this));
-    this.on("message", this.onMessage.bind(this));
-    this.on("unload", this.onUnload.bind(this));
-
-    this.subscriptions = new Map();
-    this.warnLogState = new Map();
-    this.sseErrorLogState = new Map();
-
-    this.statsInterval = null;
-
-    this.versionCheckTimer = null;
-
-    this.isShuttingDown = false;
-  }
-
-  getConfiguredAuthType() {
-    return this.config.authType === "user" || this.config.authType === "token"
-      ? this.config.authType
-      : "none";
-  }
-
-  /**
-   * Build a stable signature from server + account related config.
-   *
-   * @returns {string} SHA-256 signature
-   */
-  getServerAccountConfigSignature() {
-    const normalizedUrl = (this.config.url || "https://ntfy.sh").replace(
-      /\/+$/,
-      "",
-    );
-    const authType = this.getConfiguredAuthType();
-
-    const source = {
-      url: normalizedUrl,
-      authType,
-    };
-
-    if (authType === "user") {
-      source.user = this.config.user || "";
-      source.pass = this.config.pass || "";
-    } else if (authType === "token") {
-      source.token = this.config.token || "";
-    }
-
-    return crypto
-      .createHash("sha256")
-      .update(JSON.stringify(source))
-      .digest("hex");
-  }
-
-  /**
-   * Return a log-safe copy of headers.
-   *
-   * @param {Record<string, any>} headers - HTTP headers
-   * @returns {Record<string, any>} Headers without sensitive values
-   */
-  sanitizeHeadersForLog(headers) {
-    const safeHeaders = { ...headers };
-    if (Object.prototype.hasOwnProperty.call(safeHeaders, "Authorization")) {
-      safeHeaders["Authorization"] = "<hidden>";
-    }
-    return safeHeaders;
-  }
-
-  /**
-   * Write a placeholder value and mark it as substituted initial value.
-   *
-   * @param {string} id - State ID
-   * @param {any} val - State value
-   */
-  async setInitialStateAsync(id, val) {
-    await this.setStateAsync(id, {
-      val,
-      ack: true,
-      q: STATE_QUALITY_INITIAL,
-    });
-  }
-
-  /**
-   * Reset runtime states only when server/account config changed.
-   * Signature is stored in a local file in the adapter data directory to avoid cluttering the object tree.
-   */
-  async resetRuntimeStatesOnConfigChange() {
-    const currentSignature = this.getServerAccountConfigSignature();
-
-    const dataDir = path.join(
-      utils.getAbsoluteDefaultDataDir(),
-      this.namespace,
-    );
-    const signatureFile = path.join(dataDir, "config_signature.json");
-
-    let previousSignature = "";
-    try {
-      const fileContent = await fs.promises.readFile(signatureFile, "utf-8");
-      const data = JSON.parse(fileContent);
-      previousSignature = data.signature || "";
-    } catch (err) {
-      if (err.code !== "ENOENT") {
-        this.log.debug(`Could not read signature file: ${err.message}`);
-      }
-    }
-
-    if (previousSignature && previousSignature !== currentSignature) {
-      this.log.info(
-        "Server or account configuration changed. Resetting info, stats and topic runtime states.",
-      );
-      await this.resetRuntimeStates();
-    } else if (!previousSignature) {
-      this.log.debug(
-        "No previous server/account configuration signature found. Keeping runtime states.",
-      );
-    } else {
-      this.log.debug(
-        "Server/account configuration unchanged. Keeping runtime states.",
-      );
-    }
-
-    // Persist current signature to file
-    try {
-      await fs.promises.mkdir(dataDir, { recursive: true });
-      await fs.promises.writeFile(
-        signatureFile,
-        JSON.stringify({ signature: currentSignature }),
-        "utf-8",
-      );
-    } catch (err) {
-      this.log.error(`Could not save signature file: ${err.message}`);
-    }
-  }
-
-  /**
-   * Is called when databases are connected and adapter received configuration.
-   */
-  async onReady() {
-    this.log.debug("ntfy-client adapter starting...");
-    this.isShuttingDown = false;
-
-    try {
-      // Validate configuration
-      if (!this.config.url) {
-        this.log.warn(
-          "ntfy Server URL is not configured. Using default: https://ntfy.sh",
-        );
-      } else {
-        this.log.debug(`Using ntfy server URL: ${this.config.url}`);
-      }
-
-      // Validate authentication configuration
-      if (this.config.authType === "user") {
-        if (!this.config.user || !this.config.pass) {
-          this.log.warn(
-            "Basic authentication is selected but username or password is missing.",
-          );
-        }
-      } else if (this.config.authType === "token") {
-        if (!this.config.token) {
-          this.log.warn(
-            "Token authentication is selected but no access token is configured.",
-          );
-        }
-      }
-      this.log.debug(
-        `Authentication type configured: ${this.getConfiguredAuthType()}`,
-      );
-
-      // Create object structure
-      this.log.debug("Creating object structure...");
-      await this.createObjectStructure();
-      this.log.debug("Object structure created successfully.");
-
-      // Reset volatile runtime states only when server/account config has changed.
-      await this.resetRuntimeStatesOnConfigChange();
-
-      // Connection state will be set by checkServerVersion() based on actual health check result
-
-      // Subscribe to configured topics
-      this.log.debug("Cleaning up orphaned topics...");
-      await this.cleanupTopics();
-
-      this.log.debug("Subscribing to configured topics...");
-      await this.subscribeToTopics();
-
-      // Fetch account statistics
-      this.log.debug("Fetching account statistics...");
-      await this.fetchAccountStats();
-
-      if (this.isShuttingDown) {
-        this.log.debug("Startup interrupted because adapter is shutting down.");
-        return;
-      }
-
-      // Start periodic stats update (every 15 minutes like HA)
-      this.statsInterval = this.setInterval(
-        () => {
-          void this.fetchAccountStats().catch((error) => {
-            this.logWarnThrottled(
-              "accountStatsInterval",
-              `Scheduled account statistics update failed: ${error.message}`,
-              GENERAL_WARN_LOG_THROTTLE_MS,
-            );
-          });
-        },
-        15 * 60 * 1000,
-      );
-
-      // Check server version (also schedules periodic checks)
-      this.log.debug("Checking server version...");
-      await this.checkServerVersion();
-
-      if (this.isShuttingDown) {
-        this.log.debug("Startup interrupted because adapter is shutting down.");
-        return;
-      }
-
-      this.log.info("ntfy-client adapter started. Waiting for messages...");
-    } catch (error) {
-      if (this.isShuttingDown) {
-        this.log.debug(
-          "Startup sequence ended during shutdown. Suppressing startup error handling.",
-        );
-        return;
-      }
-      this.log.error(`Adapter startup failed: ${error.message || error}`);
-      try {
-        await this.setStateAsync("info.connection", false, true);
-      } catch (stateError) {
-        this.log.debug(
-          `Could not set info.connection after startup failure: ${stateError.message}`,
-        );
-      }
-    }
-  }
-
-  /**
-   * Reset all volatile states at startup.
-   */
-  async resetRuntimeStates() {
-    await this.resetInfoStates();
-    await this.resetStatsStates();
-    await this.resetConfiguredTopicStates();
-  }
-
-  /**
-   * Reset info states to defaults.
-   */
-  async resetInfoStates() {
-    await this.setInitialStateAsync("info.connection", false);
-    await this.setInitialStateAsync("info.serverVersion", "");
-    await this.setInitialStateAsync("info.updateAvailable", false);
-    await this.setInitialStateAsync("info.latestVersion", "");
-  }
-
-  /**
-   * Reset stats states to defaults.
-   */
-  async resetStatsStates() {
-    const numberStates = [
-      "stats.messages.published",
-      "stats.messages.remaining",
-      "stats.messages.limit",
-      "stats.messages.expiryDuration",
-      "stats.emails.sent",
-      "stats.emails.remaining",
-      "stats.emails.limit",
-      "stats.calls.made",
-      "stats.calls.remaining",
-      "stats.calls.limit",
-      "stats.reservations.count",
-      "stats.reservations.remaining",
-      "stats.reservations.limit",
-      "stats.attachments.storage",
-      "stats.attachments.storageRemaining",
-      "stats.attachments.storageLimit",
-      "stats.attachments.expiryDuration",
-      "stats.attachments.fileSizeLimit",
-      "stats.attachments.bandwidthLimit",
-    ];
-
-    for (const id of numberStates) {
-      await this.setInitialStateAsync(id, 0);
-    }
-
-    await this.setInitialStateAsync("stats.account.tier", "");
-  }
-
-  /**
-   * Reset message states for configured topics.
-   */
-  async resetConfiguredTopicStates() {
-    const topics = this.config.topics || [];
-    const topicDefaults = {
-      lastMessage: "",
-      lastTitle: "",
-      lastPriority: 0,
-      lastTags: "",
-      lastClick: "",
-      lastAttachmentUrl: "",
-      lastTimestamp: 0,
-      lastMessageId: "",
-      lastSequenceId: "",
-      lastTopic: "",
-      lastEvent: "",
-      lastIcon: "",
-      lastActions: "",
-      lastAttachmentName: "",
-      lastAttachmentType: "",
-      lastAttachmentSize: 0,
-      lastAttachmentExpires: 0,
-      lastExpires: 0,
-      lastJson: "",
-      subscribed: false,
-    };
-
-    for (const topicConfig of topics) {
-      const topicInfo = this.normalizeTopicConfig(topicConfig);
-      if (!topicInfo) {
-        continue;
-      }
-      const { topicName, displayName } = topicInfo;
-      await this.createTopicStates(topicName, displayName);
-
-      const safeName = this.sanitizeTopicName(topicName);
-      for (const [suffix, defaultValue] of Object.entries(topicDefaults)) {
-        await this.setInitialStateAsync(
-          `topics.${safeName}.${suffix}`,
-          defaultValue,
-        );
-      }
-    }
-  }
-
-  /**
-   * Create the object structure for states
-   */
-  async createObjectStructure() {
-    // Folders
-    await this.setObjectNotExistsAsync("stats", {
-      type: "folder",
-      common: {
-        name: "Statistics",
-      },
-      native: {},
-    });
-
-    await this.setObjectNotExistsAsync("stats.account", {
-      type: "folder",
-      common: {
-        name: "Account",
-      },
-      native: {},
-    });
-
-    await this.setObjectNotExistsAsync("stats.messages", {
-      type: "folder",
-      common: {
-        name: "Messages",
-      },
-      native: {},
-    });
-
-    await this.setObjectNotExistsAsync("stats.emails", {
-      type: "folder",
-      common: {
-        name: "Emails",
-      },
-      native: {},
-    });
-
-    await this.setObjectNotExistsAsync("stats.calls", {
-      type: "folder",
-      common: {
-        name: "Calls",
-      },
-      native: {},
-    });
-
-    await this.setObjectNotExistsAsync("stats.reservations", {
-      type: "folder",
-      common: {
-        name: "Reservations",
-      },
-      native: {},
-    });
-
-    await this.setObjectNotExistsAsync("stats.attachments", {
-      type: "folder",
-      common: {
-        name: "Attachments",
-      },
-      native: {},
-    });
-
-    await this.setObjectNotExistsAsync("topics", {
-      type: "folder",
-      common: {
-        name: "Topics",
-      },
-      native: {},
-    });
-
-    // Info states
-    await this.setObjectNotExistsAsync("info.connection", {
-      type: "state",
-      common: {
-        name: "Connection status",
-        type: "boolean",
-        role: "indicator.connected",
-        read: true,
-        write: false,
-        def: false,
-      },
-      native: {},
-    });
-
-    await this.setObjectNotExistsAsync("info.serverVersion", {
-      type: "state",
-      common: {
-        name: "ntfy server version",
-        type: "string",
-        role: "text",
-        read: true,
-        write: false,
-        def: "",
-      },
-      native: {},
-    });
-
-    await this.setObjectNotExistsAsync("info.updateAvailable", {
-      type: "state",
-      common: {
-        name: "Server update available",
-        type: "boolean",
-        role: "indicator",
-        read: true,
-        write: false,
-        def: false,
-      },
-      native: {},
-    });
-
-    await this.setObjectNotExistsAsync("info.latestVersion", {
-      type: "state",
-      common: {
-        name: "Latest ntfy server version available",
-        type: "string",
-        role: "text",
-        read: true,
-        write: false,
-        def: "",
-      },
-      native: {},
-    });
-
-    // Account statistics
-    const statsStates = [
-      // Message stats
-      {
-        id: "stats.messages.published",
-        name: "Messages published today",
-        type: "number",
-        role: "value",
-      },
-      {
-        id: "stats.messages.remaining",
-        name: "Messages remaining",
-        type: "number",
-        role: "value",
-      },
-      {
-        id: "stats.messages.limit",
-        name: "Messages usage limit",
-        type: "number",
-        role: "value",
-      },
-      {
-        id: "stats.messages.expiryDuration",
-        name: "Messages expiry duration (seconds)",
-        type: "number",
-        role: "value.interval",
-        unit: "s",
-      },
-      // Email stats
-      {
-        id: "stats.emails.sent",
-        name: "Emails sent today",
-        type: "number",
-        role: "value",
-      },
-      {
-        id: "stats.emails.remaining",
-        name: "Emails remaining",
-        type: "number",
-        role: "value",
-      },
-      {
-        id: "stats.emails.limit",
-        name: "Email usage limit",
-        type: "number",
-        role: "value",
-      },
-      // Phone call stats
-      {
-        id: "stats.calls.made",
-        name: "Phone calls made today",
-        type: "number",
-        role: "value",
-      },
-      {
-        id: "stats.calls.remaining",
-        name: "Phone calls remaining",
-        type: "number",
-        role: "value",
-      },
-      {
-        id: "stats.calls.limit",
-        name: "Phone calls usage limit",
-        type: "number",
-        role: "value",
-      },
-      // Reserved topics
-      {
-        id: "stats.reservations.count",
-        name: "Reserved topics",
-        type: "number",
-        role: "value",
-      },
-      {
-        id: "stats.reservations.remaining",
-        name: "Reserved topics remaining",
-        type: "number",
-        role: "value",
-      },
-      {
-        id: "stats.reservations.limit",
-        name: "Reserved topics limit",
-        type: "number",
-        role: "value",
-      },
-      // Attachment stats
-      {
-        id: "stats.attachments.storage",
-        name: "Attachment storage used (bytes)",
-        type: "number",
-        role: "value",
-        unit: "bytes",
-      },
-      {
-        id: "stats.attachments.storageRemaining",
-        name: "Attachment storage remaining (bytes)",
-        type: "number",
-        role: "value",
-        unit: "bytes",
-      },
-      {
-        id: "stats.attachments.storageLimit",
-        name: "Attachment storage limit (bytes)",
-        type: "number",
-        role: "value",
-        unit: "bytes",
-      },
-      {
-        id: "stats.attachments.expiryDuration",
-        name: "Attachment expiry duration (seconds)",
-        type: "number",
-        role: "value.interval",
-        unit: "s",
-      },
-      {
-        id: "stats.attachments.fileSizeLimit",
-        name: "Attachment file size limit (bytes)",
-        type: "number",
-        role: "value",
-        unit: "bytes",
-      },
-      {
-        id: "stats.attachments.bandwidthLimit",
-        name: "Attachment bandwidth limit (bytes)",
-        type: "number",
-        role: "value",
-        unit: "bytes",
-      },
-      // Account
-      {
-        id: "stats.account.tier",
-        name: "Subscription tier",
-        type: "string",
-        role: "info.status",
-      },
-    ];
-
-    for (const state of statsStates) {
-      await this.setObjectNotExistsAsync(state.id, {
-        type: "state",
-        common: {
-          name: state.name,
-          type: state.type,
-          role: state.role,
-          read: true,
-          write: false,
-          unit: state.unit || undefined,
-          def: state.type === "number" ? 0 : "",
-        },
-        native: {},
-      });
-    }
-
-    // Create topic folder structure for subscribed topics
-    const topics = this.config.topics || [];
-    for (const topicConfig of topics) {
-      const topicInfo = this.normalizeTopicConfig(topicConfig);
-      if (topicInfo) {
-        await this.createTopicStates(
-          topicInfo.topicName,
-          topicInfo.displayName,
-        );
-      }
-    }
-  }
-
-  /**
-   * Create states for a subscribed topic.
-   *
-   * @param {string} topicName - The topic name
-   * @param {string} [displayName] - Optional display name for the topic channel
-   */
-  async createTopicStates(topicName, displayName) {
-    const safeName = this.sanitizeTopicName(topicName);
-
-    // Create/Update channel object for the topic (using extendObjectAsync to ensure name updates from config are applied)
-    await this.extendObjectAsync(`topics.${safeName}`, {
-      type: "channel",
-      common: {
-        name: displayName || topicName,
-      },
-      native: {},
-    });
-
-    const topicStates = [
-      {
-        id: `topics.${safeName}.lastMessage`,
-        name: "Last received message",
-        type: "string",
-        role: "text",
-      },
-      {
-        id: `topics.${safeName}.lastTitle`,
-        name: "Last received title",
-        type: "string",
-        role: "text",
-      },
-      {
-        id: `topics.${safeName}.lastPriority`,
-        name: "Last received priority",
-        type: "number",
-        role: "value",
-      },
-      {
-        id: `topics.${safeName}.lastTags`,
-        name: "Last received tags",
-        type: "string",
-        role: "text",
-      },
-      {
-        id: `topics.${safeName}.lastClick`,
-        name: "Last received click URL",
-        type: "string",
-        role: "text.url",
-      },
-      {
-        id: `topics.${safeName}.lastAttachmentUrl`,
-        name: "Last received attachment URL",
-        type: "string",
-        role: "text.url",
-      },
-      {
-        id: `topics.${safeName}.lastTimestamp`,
-        name: "Last message timestamp",
-        type: "number",
-        role: "date",
-      },
-      {
-        id: `topics.${safeName}.lastMessageId`,
-        name: "Last message ID",
-        type: "string",
-        role: "text",
-      },
-      {
-        id: `topics.${safeName}.lastSequenceId`,
-        name: "Last sequence ID",
-        type: "string",
-        role: "text",
-      },
-      {
-        id: `topics.${safeName}.lastTopic`,
-        name: "Last received topic",
-        type: "string",
-        role: "text",
-      },
-      {
-        id: `topics.${safeName}.lastEvent`,
-        name: "Last received event",
-        type: "string",
-        role: "text",
-      },
-      {
-        id: `topics.${safeName}.lastIcon`,
-        name: "Last received icon URL",
-        type: "string",
-        role: "text.url",
-      },
-      {
-        id: `topics.${safeName}.lastActions`,
-        name: "Last received actions (JSON)",
-        type: "string",
-        role: "json",
-      },
-      {
-        id: `topics.${safeName}.lastAttachmentName`,
-        name: "Last received attachment name",
-        type: "string",
-        role: "text",
-      },
-      {
-        id: `topics.${safeName}.lastAttachmentType`,
-        name: "Last received attachment type",
-        type: "string",
-        role: "text",
-      },
-      {
-        id: `topics.${safeName}.lastAttachmentSize`,
-        name: "Last received attachment size",
-        type: "number",
-        role: "value",
-        unit: "bytes",
-      },
-      {
-        id: `topics.${safeName}.lastAttachmentExpires`,
-        name: "Last received attachment expiry",
-        type: "number",
-        role: "date",
-      },
-      {
-        id: `topics.${safeName}.lastExpires`,
-        name: "Last message expiry",
-        type: "number",
-        role: "date",
-      },
-      {
-        id: `topics.${safeName}.lastJson`,
-        name: "Last received full JSON",
-        type: "string",
-        role: "json",
-      },
-      {
-        id: `topics.${safeName}.subscribed`,
-        name: "Subscription active",
-        type: "boolean",
-        role: "indicator",
-      },
-    ];
-
-    for (const state of topicStates) {
-      const defValue =
-        state.type === "number" ? 0 : state.type === "boolean" ? false : "";
-      await this.setObjectNotExistsAsync(state.id, {
-        type: "state",
-        common: {
-          name: state.name,
-          type: state.type,
-          role: state.role,
-          read: true,
-          write: false,
-          def: defValue,
-          unit: state.unit,
-        },
-        native: {},
-      });
-    }
-  }
-
-  /**
-   * Sanitize topic name for use as state ID.
-   *
-   * @param {string} topicName - The topic name
-   * @returns {string} Sanitized name
-   */
-  sanitizeTopicName(topicName) {
-    if (typeof topicName !== "string") {
-      return "";
-    }
-    return topicName.replace(/[^a-zA-Z0-9_-]/g, "_");
-  }
-
-  /**
-   * Normalize and validate a topic configuration entry.
-   *
-   * @param {any} topicConfig - Topic entry from native config
-   * @returns {{ topicName: string; displayName: string } | null} Normalized topic entry or null if invalid
-   */
-  normalizeTopicConfig(topicConfig) {
-    let topicName = "";
-    let displayName = "";
-
-    if (typeof topicConfig === "string") {
-      topicName = topicConfig;
-    } else if (topicConfig && typeof topicConfig === "object") {
-      if (typeof topicConfig.topic === "string") {
-        topicName = topicConfig.topic;
-      }
-      if (typeof topicConfig.displayName === "string") {
-        displayName = topicConfig.displayName;
-      }
-    }
-
-    topicName = topicName.trim();
-    if (!topicName) {
-      return null;
-    }
-
-    return {
-      topicName,
-      displayName: displayName.trim(),
-    };
-  }
-
-  /**
-   * Get authentication headers.
-   *
-   * @returns {object} Headers object with auth
-   */
-  getAuthHeaders() {
-    const headers = {};
-    if (
-      this.config.authType === "user" &&
-      this.config.user &&
-      this.config.pass
-    ) {
-      const credentials = `${this.config.user}:${this.config.pass}`;
-      headers["Authorization"] =
-        `Basic ${Buffer.from(credentials).toString("base64")}`;
-    } else if (this.config.authType === "token" && this.config.token) {
-      headers["Authorization"] = `Bearer ${this.config.token}`;
-    }
-    return headers;
-  }
-
-  /**
-   * Log warnings with throttling to prevent repeated identical entries.
-   *
-   * @param {string} key - Unique key for the warning source
-   * @param {string} message - Warning message to log
-   * @param {number} throttleMs - Throttle window in milliseconds
-   */
-  logWarnThrottled(key, message, throttleMs) {
-    const now = Date.now();
-    const state = this.warnLogState.get(key) || {
-      lastMessage: "",
-      lastWarnTs: 0,
-      suppressedCount: 0,
-    };
-
-    const isSameMessage = state.lastMessage === message;
-    const inThrottleWindow = now - state.lastWarnTs < throttleMs;
-
-    if (isSameMessage && inThrottleWindow) {
-      state.suppressedCount += 1;
-      this.warnLogState.set(key, state);
-      return;
-    }
-
-    const suppressedSuffix =
-      state.suppressedCount > 0
-        ? ` (${state.suppressedCount} similar warnings suppressed)`
-        : "";
-    this.log.warn(`${message}${suppressedSuffix}`);
-
-    state.lastMessage = message;
-    state.lastWarnTs = now;
-    state.suppressedCount = 0;
-    this.warnLogState.set(key, state);
-  }
-
-  /**
-   * Reset warning throttling state for a key.
-   *
-   * @param {string} key - Warning key to reset
-   */
-  resetWarnThrottle(key) {
-    this.warnLogState.delete(key);
-  }
-
-  /**
-   * Log SSE errors with throttling to avoid repeated warnings during outages.
-   *
-   * @param {string} topicName - Topic name
-   * @param {Error|any} error - SSE error object
-   */
-  logSseError(topicName, error) {
-    const errorMessage = error?.message || "Connection error";
-    const now = Date.now();
-
-    const state = this.sseErrorLogState.get(topicName) || {
-      lastErrorMessage: "",
-      lastWarnTs: 0,
-      suppressedCount: 0,
-    };
-
-    const isSameError = state.lastErrorMessage === errorMessage;
-    const inThrottleWindow = now - state.lastWarnTs < SSE_ERROR_LOG_THROTTLE_MS;
-
-    if (isSameError && inThrottleWindow) {
-      state.suppressedCount += 1;
-      this.sseErrorLogState.set(topicName, state);
-      return;
-    }
-
-    const suppressedSuffix =
-      state.suppressedCount > 0
-        ? ` (${state.suppressedCount} similar warnings suppressed)`
-        : "";
-    this.log.warn(
-      `SSE error for topic "${topicName}": ${errorMessage}. Will retry automatically.${suppressedSuffix}`,
-    );
-
-    state.lastErrorMessage = errorMessage;
-    state.lastWarnTs = now;
-    state.suppressedCount = 0;
-    this.sseErrorLogState.set(topicName, state);
-  }
-
-  /**
-   * Log a summary when SSE connection recovered after suppressed errors.
-   *
-   * @param {string} topicName - Topic name
-   */
-  logSseRecovery(topicName) {
-    const state = this.sseErrorLogState.get(topicName);
-    if (state && state.suppressedCount > 0) {
-      this.log.info(
-        `SSE connection restored for topic "${topicName}" (${state.suppressedCount} repeated errors were suppressed).`,
-      );
-    }
-    this.sseErrorLogState.delete(topicName);
-  }
-
-  /**
-   * Format the error response data for logging.
-   *
-   * @param {any} data - The error response data
-   * @returns {string} Formatted error data
-   */
-  formatErrorResponse(data) {
-    if (!data) {
-      return "No response data";
-    }
-
-    if (typeof data === "object") {
-      try {
-        return JSON.stringify(data);
-      } catch {
-        return "Invalid object structure";
-      }
-    }
-
-    if (typeof data === "string") {
-      const trimmed = data.trim();
-      if (
-        trimmed.toLowerCase().startsWith("<!doctype") ||
-        trimmed.toLowerCase().startsWith("<html")
-      ) {
-        // It's likely HTML, probably a proxy error page (like Nginx 502)
-        const titleMatch = trimmed.match(/<title>(.*?)<\/title>/i);
-        if (titleMatch && titleMatch[1]) {
-          return `HTML Error: ${titleMatch[1].trim()}`;
-        }
-
-        // Fallback: extract some text from body if possible
-        const bodyMatch = trimmed.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
-        if (bodyMatch && bodyMatch[1]) {
-          const bodyText = bodyMatch[1]
-            .replace(/<[^>]+>/g, " ")
-            .replace(/\s+/g, " ")
-            .trim();
-          if (bodyText) {
-            return `HTML Error: ${bodyText.substring(0, 150)}${bodyText.length > 150 ? "..." : ""}`;
-          }
-        }
-
-        return `HTML Error: ${trimmed.substring(0, 100)}${trimmed.length > 100 ? "..." : ""}`;
-      }
-      return trimmed;
-    }
-
-    return String(data);
-  }
-
-  /**
-   * Remove orphaned topics from ioBroker that are no longer in the configuration.
-   */
-  async cleanupTopics() {
-    this.log.debug("Starting topic cleanup process...");
-
-    try {
-      const currentTopics = new Set();
-      for (const topicConfig of this.config.topics || []) {
-        const topicInfo = this.normalizeTopicConfig(topicConfig);
-        if (topicInfo) {
-          currentTopics.add(this.sanitizeTopicName(topicInfo.topicName));
-        }
-      }
-
-      // Get all existing topic objects
-      const objects = await this.getAdapterObjectsAsync();
-      const topicPrefix = `${this.namespace}.topics.`;
-
-      // Find unique topic names from the object tree
-      const existingTopics = new Set();
-      for (const id of Object.keys(objects)) {
-        if (id.startsWith(topicPrefix)) {
-          const parts = id.replace(topicPrefix, "").split(".");
-          if (parts[0]) {
-            existingTopics.add(parts[0]);
-          }
-        }
-      }
-
-      // Delete topics that are no longer in config
-      for (const topicId of existingTopics) {
-        if (!currentTopics.has(topicId)) {
-          this.log.info(
-            `Topic "${topicId}" is no longer in configuration. Deleting objects...`,
-          );
-          // Delete the entire channel/folder and all its states
-          await this.delObjectAsync(`topics.${topicId}`, { recursive: true });
-        }
-      }
-    } catch (error) {
-      this.log.error(`Failed to cleanup orphaned topics: ${error.message}`);
-    }
-  }
-
-  /**
-   * Subscribe to configured topics via SSE (Server-Sent Events).
-   */
-  async subscribeToTopics() {
-    this.log.debug("Starting topic subscription process...");
-    const topics = this.config.topics || [];
-    this.log.debug(
-      `Found ${topics.length} topics to subscribe to: ${JSON.stringify(topics)}`,
-    );
-
-    const url = (this.config.url || "https://ntfy.sh").replace(/\/+$/, "");
-
-    for (const topicConfig of topics) {
-      const topicInfo = this.normalizeTopicConfig(topicConfig);
-      if (!topicInfo) {
-        continue;
-      }
-
-      const { topicName, displayName } = topicInfo;
-
-      try {
-        this.log.debug(
-          `Attempting to subscribe to topic: ${topicName} (Display Name: ${displayName || "none"})`,
-        );
-        await this.subscribeToTopic(url, topicName, displayName);
-        this.log.debug(`Successfully subscribed to topic: ${topicName}`);
-      } catch (error) {
-        this.log.error(
-          `Failed to subscribe to topic "${topicName}": ${error.message}`,
-        );
-      }
-    }
-  }
-
-  /**
-   * Subscribe to a single topic via SSE.
-   *
-   * @param {string} url - Server URL
-   * @param {string} topicName - Topic name
-   * @param {string} [displayName] - Optional display name
-   */
-  async subscribeToTopic(url, topicName, displayName) {
-    this.log.debug(`Creating SSE subscription for topic "${topicName}"...`);
-    const safeName = this.sanitizeTopicName(topicName);
-
-    const existingSubscription = this.subscriptions.get(topicName);
-    if (existingSubscription) {
-      this.log.debug(
-        `Closing existing SSE subscription for topic "${topicName}" before re-subscribing.`,
-      );
-      try {
-        existingSubscription.close();
-      } catch (error) {
-        this.log.debug(
-          `Could not close previous SSE subscription for topic "${topicName}": ${error.message}`,
-        );
-      }
-      this.subscriptions.delete(topicName);
-    }
-
-    // Create objects first
-    await this.createTopicStates(topicName, displayName);
-
-    const sseUrl = `${url}/${encodeURIComponent(topicName)}/sse`;
-    this.log.debug(`SSE URL: ${sseUrl}`);
-
-    // Build URL-safe authentication parameter for SSE
-    let authUrl = sseUrl;
-    if (this.config.authType === "token" && this.config.token) {
-      // Use official ?token parameter for token auth
-      authUrl += `?token=${encodeURIComponent(this.config.token)}`;
-    } else if (
-      this.config.authType === "user" &&
-      this.config.user &&
-      this.config.pass
-    ) {
-      // For basic auth, ntfy expects ?auth=Base64("Basic Base64(user:pass)")
-      // Use URL-safe base64: replace + with -, / with _, strip = padding
-      const credentials = `${this.config.user}:${this.config.pass}`;
-      const basicAuthValue = `Basic ${Buffer.from(credentials).toString("base64")}`;
-      const encodedAuth = Buffer.from(basicAuthValue)
-        .toString("base64")
-        .replace(/\+/g, "-")
-        .replace(/\//g, "_")
-        .replace(/=+$/, "");
-      authUrl += `?auth=${encodedAuth}`;
-    }
-
-    this.log.info(`Subscribing to topic "${topicName}" at ${sseUrl}`);
-    this.log.debug(
-      `SSE connection created for topic "${topicName}" (parameters masked)`,
-    );
-
-    const es = new EventSource(authUrl);
-
-    es.onopen = () => {
-      this.log.debug(`SSE connection opened for topic "${topicName}"`);
-      this.logSseRecovery(topicName);
-      void Promise.all([
-        this.setStateAsync(`topics.${safeName}.subscribed`, true, true),
-        this.setStateAsync("info.connection", true, true),
-      ]).catch((error) => {
-        this.logWarnThrottled(
-          `sseOpenState:${topicName}`,
-          `Failed to update SSE connection states for topic "${topicName}": ${error.message}`,
-          GENERAL_WARN_LOG_THROTTLE_MS,
-        );
-      });
-    };
-
-    es.addEventListener("message", (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        if (data.event === "message") {
-          void this.handleIncomingMessage(topicName, data).catch((error) => {
-            this.log.error(
-              `Failed to process incoming message for topic "${topicName}": ${error.message}`,
-            );
-          });
-        }
-      } catch (error) {
-        this.logWarnThrottled(
-          `sseParse:${topicName}`,
-          `Failed to parse SSE message for topic "${topicName}": ${error.message}`,
-          SSE_PARSE_WARN_LOG_THROTTLE_MS,
-        );
-      }
-    });
-
-    es.onerror = (error) => {
-      this.logSseError(topicName, error);
-      void this.setStateAsync(
-        `topics.${safeName}.subscribed`,
-        false,
-        true,
-      ).catch((stateError) => {
-        this.log.debug(
-          `Failed to set subscribed=false for topic "${topicName}": ${stateError.message}`,
-        );
-      });
-    };
-
-    this.log.debug(
-      `SSE EventSource created for topic "${topicName}", waiting for connection...`,
-    );
-
-    this.subscriptions.set(topicName, es);
-  }
-
-  /**
-   * Handle an incoming message from a subscribed topic.
-   *
-   * @param {string} topicName - Topic name
-   * @param {object} data - Message data
-   */
-  async handleIncomingMessage(topicName, data) {
-    const safeName = this.sanitizeTopicName(topicName);
-
-    this.log.debug(
-      `Received message on topic "${topicName}": ${JSON.stringify(data)}`,
-    );
-
-    try {
-      // Any incoming message confirms connection is alive
-      await this.setStateAsync("info.connection", true, true);
-
-      await this.setStateAsync(
-        `topics.${safeName}.lastMessage`,
-        data.message || "",
-        true,
-      );
-      await this.setStateAsync(
-        `topics.${safeName}.lastTitle`,
-        data.title || "",
-        true,
-      );
-      await this.setStateAsync(
-        `topics.${safeName}.lastPriority`,
-        data.priority || 3,
-        true,
-      );
-      await this.setStateAsync(
-        `topics.${safeName}.lastTags`,
-        Array.isArray(data.tags)
-          ? data.tags.join(",")
-          : String(data.tags || ""),
-        true,
-      );
-      await this.setStateAsync(
-        `topics.${safeName}.lastClick`,
-        data.click || "",
-        true,
-      );
-
-      const attachUrl =
-        data.attachment && data.attachment.url ? data.attachment.url : "";
-      await this.setStateAsync(
-        `topics.${safeName}.lastAttachmentUrl`,
-        attachUrl,
-        true,
-      );
-      await this.setStateAsync(
-        `topics.${safeName}.lastTimestamp`,
-        data.time ? data.time * 1000 : Date.now(),
-        true,
-      );
-      await this.setStateAsync(
-        `topics.${safeName}.lastMessageId`,
-        data.id || "",
-        true,
-      );
-      await this.setStateAsync(
-        `topics.${safeName}.lastSequenceId`,
-        data.sequence_id || "",
-        true,
-      );
-      await this.setStateAsync(
-        `topics.${safeName}.lastTopic`,
-        data.topic || "",
-        true,
-      );
-      await this.setStateAsync(
-        `topics.${safeName}.lastEvent`,
-        data.event || "",
-        true,
-      );
-      await this.setStateAsync(
-        `topics.${safeName}.lastIcon`,
-        data.icon || "",
-        true,
-      );
-
-      let actionsStr = "";
-      if (data.actions) {
-        try {
-          actionsStr = JSON.stringify(data.actions);
-        } catch {
-          actionsStr = String(data.actions);
-        }
-      }
-      await this.setStateAsync(
-        `topics.${safeName}.lastActions`,
-        actionsStr,
-        true,
-      );
-      await this.setStateAsync(
-        `topics.${safeName}.lastAttachmentName`,
-        data.attachment && data.attachment.name ? data.attachment.name : "",
-        true,
-      );
-      await this.setStateAsync(
-        `topics.${safeName}.lastAttachmentType`,
-        data.attachment && data.attachment.type ? data.attachment.type : "",
-        true,
-      );
-      await this.setStateAsync(
-        `topics.${safeName}.lastAttachmentSize`,
-        data.attachment && data.attachment.size ? data.attachment.size : 0,
-        true,
-      );
-      await this.setStateAsync(
-        `topics.${safeName}.lastAttachmentExpires`,
-        data.attachment && data.attachment.expires
-          ? data.attachment.expires * 1000
-          : 0,
-        true,
-      );
-      await this.setStateAsync(
-        `topics.${safeName}.lastExpires`,
-        data.expires ? data.expires * 1000 : 0,
-        true,
-      );
-      await this.setStateAsync(
-        `topics.${safeName}.lastJson`,
-        JSON.stringify(data),
-        true,
-      );
-    } catch (error) {
-      this.log.error(
-        `Failed to update states for incoming message on topic "${topicName}" (ID: ${data.id || "unknown"}): ${error.message}`,
-      );
-    }
-  }
-
-  /**
-   * Fetch account statistics from the ntfy server.
-   */
-  async fetchAccountStats() {
-    this.log.debug("Triggering account statistics update...");
-    const url = (this.config.url || "https://ntfy.sh").replace(/\/+$/, "");
-    const authHeaders = this.getAuthHeaders();
-
-    // Only fetch if authenticated
-    if (!authHeaders["Authorization"]) {
-      this.resetWarnThrottle("accountStatsFetchFailed");
-      this.log.debug(
-        "Skipping account stats fetch - no authentication configured.",
-      );
-      return;
-    }
-
-    try {
-      const response = await axios.get(`${url}/v1/account`, {
-        headers: authHeaders,
-        timeout: 10000,
-      });
-
-      const account = response.data;
-
-      if (account.tier !== undefined || account.role !== undefined) {
-        await this.setStateAsync(
-          "stats.account.tier",
-          account.tier !== undefined
-            ? account.tier
-            : account.role !== undefined
-              ? account.role
-              : "none",
-          true,
-        );
-      }
-
-      if (account.limits) {
-        const limits = account.limits;
-        await this.setStateAsync(
-          "stats.messages.limit",
-          limits.messages !== undefined ? limits.messages : 0,
-          true,
-        );
-        await this.setStateAsync(
-          "stats.messages.expiryDuration",
-          limits.messages_expiry_duration !== undefined
-            ? limits.messages_expiry_duration
-            : 0,
-          true,
-        );
-        await this.setStateAsync(
-          "stats.emails.limit",
-          limits.emails !== undefined ? limits.emails : 0,
-          true,
-        );
-        await this.setStateAsync(
-          "stats.calls.limit",
-          limits.calls !== undefined ? limits.calls : 0,
-          true,
-        );
-        await this.setStateAsync(
-          "stats.reservations.limit",
-          limits.reservations !== undefined ? limits.reservations : 0,
-          true,
-        );
-        await this.setStateAsync(
-          "stats.attachments.storageLimit",
-          limits.attachment_total_size !== undefined
-            ? limits.attachment_total_size
-            : 0,
-          true,
-        );
-        await this.setStateAsync(
-          "stats.attachments.fileSizeLimit",
-          limits.attachment_file_size !== undefined
-            ? limits.attachment_file_size
-            : 0,
-          true,
-        );
-        await this.setStateAsync(
-          "stats.attachments.expiryDuration",
-          limits.attachment_expiry_duration !== undefined
-            ? limits.attachment_expiry_duration
-            : 0,
-          true,
-        );
-        await this.setStateAsync(
-          "stats.attachments.bandwidthLimit",
-          limits.attachment_bandwidth !== undefined
-            ? limits.attachment_bandwidth
-            : 0,
-          true,
-        );
-      }
-
-      if (account.stats) {
-        const stats = account.stats;
-        await this.setStateAsync(
-          "stats.messages.published",
-          stats.messages !== undefined ? stats.messages : 0,
-          true,
-        );
-        await this.setStateAsync(
-          "stats.messages.remaining",
-          stats.messages_remaining !== undefined ? stats.messages_remaining : 0,
-          true,
-        );
-        await this.setStateAsync(
-          "stats.emails.sent",
-          stats.emails !== undefined ? stats.emails : 0,
-          true,
-        );
-        await this.setStateAsync(
-          "stats.emails.remaining",
-          stats.emails_remaining !== undefined ? stats.emails_remaining : 0,
-          true,
-        );
-        await this.setStateAsync(
-          "stats.calls.made",
-          stats.calls !== undefined ? stats.calls : 0,
-          true,
-        );
-        await this.setStateAsync(
-          "stats.calls.remaining",
-          stats.calls_remaining !== undefined ? stats.calls_remaining : 0,
-          true,
-        );
-        await this.setStateAsync(
-          "stats.reservations.count",
-          stats.reservations !== undefined ? stats.reservations : 0,
-          true,
-        );
-        await this.setStateAsync(
-          "stats.reservations.remaining",
-          stats.reservations_remaining !== undefined
-            ? stats.reservations_remaining
-            : 0,
-          true,
-        );
-        await this.setStateAsync(
-          "stats.attachments.storage",
-          stats.attachment_total_size !== undefined
-            ? stats.attachment_total_size
-            : 0,
-          true,
-        );
-        await this.setStateAsync(
-          "stats.attachments.storageRemaining",
-          stats.attachment_total_size_remaining !== undefined
-            ? stats.attachment_total_size_remaining
-            : 0,
-          true,
-        );
-      }
-
-      this.log.debug("Account statistics updated successfully.");
-      this.log.debug(`Account data received: ${JSON.stringify(account)}`);
-      this.resetWarnThrottle("accountStatsFetchFailed");
-    } catch (error) {
-      if (error.response && error.response.status === 401) {
-        this.resetWarnThrottle("accountStatsFetchFailed");
-        this.log.debug(
-          "Account stats not available - authentication failed or not supported.",
-        );
-      } else if (error.response && error.response.status === 404) {
-        this.resetWarnThrottle("accountStatsFetchFailed");
-        this.log.debug("Account stats endpoint not available on this server.");
-      } else {
-        this.logWarnThrottled(
-          "accountStatsFetchFailed",
-          `Failed to fetch account statistics: ${error.message || "Unknown error"}`,
-          GENERAL_WARN_LOG_THROTTLE_MS,
-        );
-      }
-    }
-  }
-
-  /**
-   * Check the ntfy server version and compare with latest available.
-   */
-  async checkServerVersion() {
-    if (this.isShuttingDown) {
-      return;
-    }
-    this.log.debug("Triggering server version and update check...");
-    const url = (this.config.url || "https://ntfy.sh").replace(/\/+$/, "");
-    const authHeaders = this.getAuthHeaders();
-
-    try {
-      this.log.debug(`Checking server health at ${url}/v1/health...`);
-      // Get current server health/version
-      const healthResponse = await axios.get(`${url}/v1/health`, {
-        headers: authHeaders,
-        timeout: 10000,
-      });
-
-      if (healthResponse.data && healthResponse.data.healthy) {
-        this.log.debug(`Server connection successful! Server is healthy.`);
-        this.resetWarnThrottle("serverHealthCheck");
-        await this.setStateAsync("info.connection", true, true);
-      } else {
-        this.logWarnThrottled(
-          "serverHealthCheck",
-          `Server health check returned unhealthy status: ${JSON.stringify(healthResponse.data)}`,
-          GENERAL_WARN_LOG_THROTTLE_MS,
-        );
-        await this.setStateAsync("info.connection", false, true);
-      }
-
-      // Schedule next check (6 hours if healthy, 5 minutes if unhealthy)
-      const nextCheckMs =
-        healthResponse.data && healthResponse.data.healthy
-          ? 6 * 60 * 60 * 1000
-          : 5 * 60 * 1000;
-      this.scheduleNextVersionCheck(nextCheckMs);
-
-      // Try to get server version (admin-only endpoint)
-      try {
-        const versionResponse = await axios.get(`${url}/v1/version`, {
-          headers: authHeaders,
-          timeout: 10000,
+    /**
+     * @param {Partial<utils.AdapterOptions>} [options] Options for the adapter
+     */
+    constructor(options) {
+        super({
+            ...options,
+            name: 'ntfy-client',
         });
+        this.on('ready', this.onReady.bind(this));
+        this.on('message', this.onMessage.bind(this));
+        this.on('unload', this.onUnload.bind(this));
 
-        if (versionResponse.data && versionResponse.data.version) {
-          await this.setStateAsync(
-            "info.serverVersion",
-            versionResponse.data.version,
-            true,
-          );
-          this.log.debug(`Server version: ${versionResponse.data.version}`);
-        }
-      } catch {
-        this.log.debug(
-          "Server version endpoint not available (requires admin privileges).",
-        );
-      }
+        this.subscriptions = new Map();
+        this.warnLogState = new Map();
+        this.sseErrorLogState = new Map();
 
-      // Check for latest version from GitHub releases (only for self-hosted)
-      if (url !== "https://ntfy.sh") {
-        try {
-          const githubResponse = await axios.get(
-            "https://api.github.com/repos/binwiederhier/ntfy/releases/latest",
-            { timeout: 10000 },
-          );
-
-          if (githubResponse.data && githubResponse.data.tag_name) {
-            const latestVersion = githubResponse.data.tag_name.replace(
-              /^v/,
-              "",
-            );
-            await this.setStateAsync("info.latestVersion", latestVersion, true);
-
-            const currentVersion =
-              await this.getStateAsync("info.serverVersion");
-            if (currentVersion && currentVersion.val) {
-              const isUpdateAvailable =
-                currentVersion.val.toString() !== latestVersion;
-              await this.setStateAsync(
-                "info.updateAvailable",
-                isUpdateAvailable,
-                true,
-              );
-            }
-          }
-        } catch {
-          this.log.debug("Failed to check for latest ntfy version on GitHub.");
-        }
-      }
-    } catch (error) {
-      let warningMessage;
-      if (error.response) {
-        if (error.response.status === 404) {
-          warningMessage =
-            "Server health check failed (404): No ntfy instance found at this URL. Please verify your Server URL.";
-        } else if (error.response.status === 401) {
-          warningMessage =
-            "Server health check failed (401): Authentication rejected. Please check your Username/Password or Access Token.";
-        } else if (error.response.status === 403) {
-          warningMessage =
-            "Server health check failed (403): Access forbidden. Ensure you have the right permissions.";
-        } else {
-          warningMessage = `Server health check failed (${error.response.status}): ${error.message}`;
-        }
-      } else {
-        warningMessage = `Server health check failed: ${error.message}`;
-      }
-      this.logWarnThrottled(
-        "serverHealthCheck",
-        warningMessage,
-        GENERAL_WARN_LOG_THROTTLE_MS,
-      );
-
-      if (!this.isShuttingDown) {
-        try {
-          await this.setStateAsync("info.connection", false, true);
-        } catch (stateError) {
-          this.log.debug(
-            `Could not set info.connection after health check failure: ${stateError.message}`,
-          );
-        }
-      }
-
-      // Schedule next check (5 minutes on failure)
-      this.scheduleNextVersionCheck(5 * 60 * 1000);
-    }
-  }
-
-  /**
-   * Schedule the next server version and health check.
-   *
-   * @param {number} ms - Milliseconds until next check
-   */
-  scheduleNextVersionCheck(ms) {
-    if (this.isShuttingDown) {
-      return;
-    }
-    if (this.versionCheckTimer) {
-      this.clearTimeout(this.versionCheckTimer);
-    }
-    this.versionCheckTimer = this.setTimeout(() => {
-      void this.checkServerVersion().catch((error) => {
-        this.logWarnThrottled(
-          "serverVersionTimer",
-          `Scheduled server version check failed: ${error.message}`,
-          GENERAL_WARN_LOG_THROTTLE_MS,
-        );
-      });
-    }, ms);
-  }
-
-  /**
-   * Is called when adapter shuts down - callback has to be called under any circumstances!
-   *
-   * @param {() => void} callback Callback to be called when unloaded
-   */
-  onUnload(callback) {
-    try {
-      this.isShuttingDown = true;
-
-      // Close all SSE subscriptions
-      for (const [topicName, es] of this.subscriptions) {
-        this.log.debug(`Closing subscription for topic "${topicName}"`);
-        es.close();
-      }
-      this.subscriptions.clear();
-      this.warnLogState.clear();
-      this.sseErrorLogState.clear();
-
-      // Clear intervals
-      if (this.statsInterval) {
-        this.clearInterval(this.statsInterval);
         this.statsInterval = null;
-      }
-      if (this.versionCheckTimer) {
-        this.clearTimeout(this.versionCheckTimer);
+
         this.versionCheckTimer = null;
-      }
 
-      this.log.info("ntfy-client adapter stopped.");
-      callback();
-    } catch {
-      callback();
-    }
-  }
-
-  /**
-   * Some message was sent to this instance over message box. Used by email, pushover, text2speech, ...
-   * Using this method requires "common.messagebox" property to be set to true in io-package.json
-   *
-   * @param {ioBroker.Message} obj The message object
-   */
-  async onMessage(obj) {
-    if (
-      !obj ||
-      typeof obj !== "object" ||
-      !Object.prototype.hasOwnProperty.call(obj, "message")
-    ) {
-      return;
+        this.isShuttingDown = false;
     }
 
-    try {
-      let result;
-      switch (obj.command) {
-        case "send":
-          result = await this.sendNotification(obj.message);
-          break;
-        case "publish":
-          result = await this.sendNotification(obj.message);
-          break;
-        case "clear":
-        case "dismiss":
-          result = await this.dismissNotification(obj.message);
-          break;
-        case "delete":
-          result = await this.deleteNotification(obj.message);
-          break;
-        default:
-          this.log.warn(`Unknown command: ${obj.command}`);
-          if (obj.callback) {
-            this.sendTo(
-              obj.from,
-              obj.command,
-              { error: `Unknown command: ${obj.command}` },
-              obj.callback,
+    getConfiguredAuthType() {
+        return this.config.authType === 'user' || this.config.authType === 'token' ? this.config.authType : 'none';
+    }
+
+    /**
+     * Build a stable signature from server + account related config.
+     *
+     * @returns {string} SHA-256 signature
+     */
+    getServerAccountConfigSignature() {
+        const normalizedUrl = (this.config.url || 'https://ntfy.sh').replace(/\/+$/, '');
+        const authType = this.getConfiguredAuthType();
+
+        const source = {
+            url: normalizedUrl,
+            authType,
+        };
+
+        if (authType === 'user') {
+            source.user = this.config.user || '';
+            source.pass = this.config.pass || '';
+        } else if (authType === 'token') {
+            source.token = this.config.token || '';
+        }
+
+        return crypto.createHash('sha256').update(JSON.stringify(source)).digest('hex');
+    }
+
+    /**
+     * Return a log-safe copy of headers.
+     *
+     * @param {Record<string, any>} headers - HTTP headers
+     * @returns {Record<string, any>} Headers without sensitive values
+     */
+    sanitizeHeadersForLog(headers) {
+        const safeHeaders = { ...headers };
+        if (Object.prototype.hasOwnProperty.call(safeHeaders, 'Authorization')) {
+            safeHeaders['Authorization'] = '<hidden>';
+        }
+        return safeHeaders;
+    }
+
+    /**
+     * Write a placeholder value and mark it as substituted initial value.
+     *
+     * @param {string} id - State ID
+     * @param {any} val - State value
+     */
+    async setInitialStateAsync(id, val) {
+        await this.setStateAsync(id, {
+            val,
+            ack: true,
+            q: STATE_QUALITY_INITIAL,
+        });
+    }
+
+    /**
+     * Reset runtime states only when server/account config changed.
+     * Signature is stored in a local file in the adapter data directory to avoid cluttering the object tree.
+     */
+    async resetRuntimeStatesOnConfigChange() {
+        const currentSignature = this.getServerAccountConfigSignature();
+
+        const dataDir = path.join(utils.getAbsoluteDefaultDataDir(), this.namespace);
+        const signatureFile = path.join(dataDir, 'config_signature.json');
+
+        let previousSignature = '';
+        try {
+            const fileContent = await fs.promises.readFile(signatureFile, 'utf-8');
+            const data = JSON.parse(fileContent);
+            previousSignature = data.signature || '';
+        } catch (err) {
+            if (err.code !== 'ENOENT') {
+                this.log.debug(`Could not read signature file: ${err.message}`);
+            }
+        }
+
+        if (previousSignature && previousSignature !== currentSignature) {
+            this.log.info('Server or account configuration changed. Resetting info, stats and topic runtime states.');
+            await this.resetRuntimeStates();
+        } else if (!previousSignature) {
+            this.log.debug('No previous server/account configuration signature found. Keeping runtime states.');
+        } else {
+            this.log.debug('Server/account configuration unchanged. Keeping runtime states.');
+        }
+
+        // Persist current signature to file
+        try {
+            await fs.promises.mkdir(dataDir, { recursive: true });
+            await fs.promises.writeFile(signatureFile, JSON.stringify({ signature: currentSignature }), 'utf-8');
+        } catch (err) {
+            this.log.error(`Could not save signature file: ${err.message}`);
+        }
+    }
+
+    /**
+     * Is called when databases are connected and adapter received configuration.
+     */
+    async onReady() {
+        this.log.debug('ntfy-client adapter starting...');
+        this.isShuttingDown = false;
+
+        try {
+            // Validate configuration
+            if (!this.config.url) {
+                this.log.warn('ntfy Server URL is not configured. Using default: https://ntfy.sh');
+            } else {
+                this.log.debug(`Using ntfy server URL: ${this.config.url}`);
+            }
+
+            // Validate authentication configuration
+            if (this.config.authType === 'user') {
+                if (!this.config.user || !this.config.pass) {
+                    this.log.warn('Basic authentication is selected but username or password is missing.');
+                }
+            } else if (this.config.authType === 'token') {
+                if (!this.config.token) {
+                    this.log.warn('Token authentication is selected but no access token is configured.');
+                }
+            }
+            this.log.debug(`Authentication type configured: ${this.getConfiguredAuthType()}`);
+
+            // Create object structure
+            this.log.debug('Creating object structure...');
+            await this.createObjectStructure();
+            this.log.debug('Object structure created successfully.');
+
+            // Reset volatile runtime states only when server/account config has changed.
+            await this.resetRuntimeStatesOnConfigChange();
+
+            // Connection state will be set by checkServerVersion() based on actual health check result
+
+            // Subscribe to configured topics
+            this.log.debug('Cleaning up orphaned topics...');
+            await this.cleanupTopics();
+
+            this.log.debug('Subscribing to configured topics...');
+            await this.subscribeToTopics();
+
+            // Fetch account statistics
+            this.log.debug('Fetching account statistics...');
+            await this.fetchAccountStats();
+
+            if (this.isShuttingDown) {
+                this.log.debug('Startup interrupted because adapter is shutting down.');
+                return;
+            }
+
+            // Start periodic stats update (every 15 minutes like HA)
+            this.statsInterval = this.setInterval(
+                () => {
+                    void this.fetchAccountStats().catch(error => {
+                        this.logWarnThrottled(
+                            'accountStatsInterval',
+                            `Scheduled account statistics update failed: ${error.message}`,
+                            GENERAL_WARN_LOG_THROTTLE_MS,
+                        );
+                    });
+                },
+                15 * 60 * 1000,
             );
-          }
-          return;
-      }
 
-      if (obj.callback) {
-        this.sendTo(
-          obj.from,
-          obj.command,
-          { success: true, ...result },
-          obj.callback,
-        );
-      }
-    } catch (error) {
-      this.log.error(
-        `Failed to execute command "${obj.command}": ${error.message}`,
-      );
-      if (obj.callback) {
-        this.sendTo(
-          obj.from,
-          obj.command,
-          { error: error.message },
-          obj.callback,
-        );
-      }
-    }
-  }
+            // Check server version (also schedules periodic checks)
+            this.log.debug('Checking server version...');
+            await this.checkServerVersion();
 
-  /**
-   * Check if a value is truthy in the ntfy boolean sense.
-   *
-   * @param {*} val Value to check
-   * @returns {boolean} Whether the value is truthy
-   */
-  isTruthy(val) {
-    return val === true || val === "true" || val === "yes" || val === "1";
-  }
+            if (this.isShuttingDown) {
+                this.log.debug('Startup interrupted because adapter is shutting down.');
+                return;
+            }
 
-  /**
-   * Build common notification headers from options.
-   * Used by both sendNotification and sendWithFileAttachment.
-   *
-   * @param {object} opts Notification options
-   * @returns {Record<string, string>} Headers object
-   */
-  buildCommonHeaders(opts) {
-    const headers = {};
-    if (opts.title) {
-      headers["Title"] = opts.title;
-    }
-    if (opts.priority) {
-      headers["Priority"] = opts.priority.toString();
-    }
-    if (opts.tags) {
-      headers["Tags"] = Array.isArray(opts.tags)
-        ? opts.tags.join(",")
-        : opts.tags;
-    }
-    if (opts.click) {
-      headers["Click"] = opts.click;
-    }
-    if (opts.filename) {
-      headers["Filename"] = opts.filename;
-    }
-    if (opts.actions) {
-      headers["Actions"] =
-        typeof opts.actions === "object"
-          ? JSON.stringify(opts.actions)
-          : opts.actions;
-    }
-    if (opts.markdown) {
-      headers["Markdown"] = "yes";
-    }
-    if (opts.delay) {
-      headers["Delay"] = opts.delay;
-    }
-    if (opts.email) {
-      headers["Email"] = opts.email;
-    }
-    if (opts.call) {
-      headers["Call"] = opts.call;
-    }
-    if (opts.icon) {
-      headers["Icon"] = opts.icon;
-    }
-    if (opts.sequenceId) {
-      headers["Sequence-ID"] = opts.sequenceId;
-    }
-    if (this.isTruthy(opts.disableCache)) {
-      headers["Cache"] = "no";
-    }
-    if (this.isTruthy(opts.disableFirebase)) {
-      headers["Firebase"] = "no";
-    }
-    if (
-      opts.unifiedPush === true ||
-      opts.unifiedPush === "true" ||
-      opts.unifiedPush === "1"
-    ) {
-      headers["UnifiedPush"] = "1";
-    }
-    return headers;
-  }
-
-  /**
-   * Build an array of debug parameter strings for logging.
-   * Used by both sendNotification and sendWithFileAttachment.
-   *
-   * @param {object} opts Notification options
-   * @returns {string[]} Array of formatted debug strings
-   */
-  buildDebugParams(opts) {
-    const params = [];
-    if (opts.text) {
-      params.push(`Message: "${opts.text}"`);
-    }
-    if (opts.title) {
-      params.push(`Title: "${opts.title}"`);
-    }
-    if (opts.priority) {
-      params.push(`Priority: "${opts.priority}"`);
-    }
-    if (opts.tags) {
-      params.push(`Tags: "${opts.tags}"`);
-    }
-    if (opts.click) {
-      params.push(`Click: "${opts.click}"`);
-    }
-    if (opts.attach) {
-      params.push(`Attach: "${opts.attach}"`);
-    }
-    if (opts.filename) {
-      params.push(`Filename: "${opts.filename}"`);
-    }
-    if (opts.actions) {
-      params.push(
-        `Actions: "${typeof opts.actions === "object" ? JSON.stringify(opts.actions) : opts.actions}"`,
-      );
-    }
-    if (opts.markdown) {
-      params.push(`Markdown: "yes"`);
-    }
-    if (opts.delay) {
-      params.push(`Delay: "${opts.delay}"`);
-    }
-    if (opts.email) {
-      params.push(`Email: "${opts.email}"`);
-    }
-    if (opts.call) {
-      params.push(`Call: "${opts.call}"`);
-    }
-    if (opts.icon) {
-      params.push(`Icon: "${opts.icon}"`);
-    }
-    if (opts.sequenceId) {
-      params.push(`Sequence-ID: "${opts.sequenceId}"`);
-    }
-    if (this.isTruthy(opts.disableCache)) {
-      params.push(`Cache: "no"`);
-    }
-    if (this.isTruthy(opts.disableFirebase)) {
-      params.push(`Firebase: "no"`);
-    }
-    if (
-      opts.unifiedPush === true ||
-      opts.unifiedPush === "true" ||
-      opts.unifiedPush === "1"
-    ) {
-      params.push(`UnifiedPush: "1"`);
-    }
-    if (opts.template) {
-      params.push(`Template: "${opts.template}"`);
-    }
-    return params;
-  }
-
-  /**
-   * Build a request URL with template query parameter if applicable.
-   *
-   * @param {string} endpoint Base endpoint URL
-   * @param {*} template Template value
-   * @returns {string} Request URL with optional tpl parameter
-   */
-  buildTemplateUrl(endpoint, template) {
-    if (
-      template !== undefined &&
-      template !== null &&
-      template !== "" &&
-      template !== false
-    ) {
-      const tplVal = this.isTruthy(template) ? "yes" : template;
-      return `${endpoint}${endpoint.includes("?") ? "&" : "?"}tpl=${tplVal}`;
-    }
-    return endpoint;
-  }
-
-  /**
-   * Send a notification to ntfy.
-   *
-   * @param {string|object} msgObj The message object or string
-   * @returns {Promise<object>} The response data
-   */
-  async sendNotification(msgObj) {
-    this.log.debug(`sendNotification called with: ${JSON.stringify(msgObj)}`);
-    let text = "";
-    let topic = "";
-    let title = "";
-    let priority = "";
-    let tags = "";
-    let click = "";
-    let attach = "";
-    let attachFile = "";
-    let filename = "";
-    let actions = "";
-    let markdown = false;
-    let delay = "";
-    let email = "";
-    let call = "";
-    let icon = "";
-    let sequenceId = "";
-    let disableCache = "";
-    let disableFirebase = "";
-    let unifiedPush = "";
-    let template = "";
-    let jsonData = "";
-
-    if (typeof msgObj === "string") {
-      text = msgObj;
-    } else if (msgObj && typeof msgObj === "object") {
-      text = msgObj.message || "";
-      topic = msgObj.topic || "";
-      title = msgObj.title || "";
-      priority = msgObj.priority || "";
-      tags = msgObj.tags || "";
-      click = msgObj.click || "";
-      attach = msgObj.attach || "";
-      attachFile = msgObj.attach_file || "";
-      filename = msgObj.filename || "";
-      actions = msgObj.actions || "";
-      markdown = !!msgObj.markdown;
-      delay = msgObj.delay || "";
-      email = msgObj.email || "";
-      call = msgObj.call || "";
-      icon = msgObj.icon || "";
-      sequenceId = msgObj.sequence_id || "";
-      disableCache = msgObj.disable_cache;
-      disableFirebase = msgObj.disable_firebase;
-      unifiedPush = msgObj.unified_push;
-      template = msgObj.template;
-      jsonData = msgObj.data || "";
-    }
-
-    // If message is an object (e.g. a JSON payload for templates), stringify it early
-    // to prevent axios from auto-setting "Content-Type: application/json"
-    if (typeof text === "object" && text !== null) {
-      text = JSON.stringify(text);
-    }
-
-    // Use default topic from config if not specified
-    if (!topic) {
-      this.log.debug("No topic specified, using default topic from config...");
-      topic = this.config.defaultTopic || "";
-    }
-
-    if (!topic) {
-      throw new Error("Topic is required to send a notification.");
-    }
-
-    // Validate priority value
-    if (
-      priority &&
-      ![
-        "1",
-        "2",
-        "3",
-        "4",
-        "5",
-        "min",
-        "low",
-        "default",
-        "high",
-        "max",
-        "urgent",
-      ].includes(priority.toString().toLowerCase())
-    ) {
-      this.log.warn(
-        `Invalid priority value: "${priority}". Valid values are 1-5 or min/low/default/high/max/urgent.`,
-      );
-    }
-
-    const url = (this.config.url || "https://ntfy.sh").replace(/\/+$/, "");
-
-    if (attach && attachFile) {
-      this.log.warn(
-        'Both "attach" (URL) and "attach_file" (local file) are provided. "attach_file" will take precedence.',
-      );
-    }
-
-    // If attach_file is specified, use PUT method with file upload
-    if (attachFile) {
-      return await this.sendWithFileAttachment({
-        url,
-        topic,
-        text,
-        title,
-        priority,
-        tags,
-        click,
-        filename,
-        actions,
-        markdown,
-        delay,
-        email,
-        call,
-        icon,
-        sequenceId,
-        disableCache,
-        disableFirebase,
-        unifiedPush,
-        template,
-        filePath: attachFile,
-        jsonData,
-      });
-    }
-
-    const endpoint = `${url}/${encodeURIComponent(topic)}`;
-    this.log.debug(`Sending notification to endpoint: ${endpoint}`);
-
-    const headers = this.buildCommonHeaders({
-      title,
-      priority,
-      tags,
-      click,
-      filename,
-      actions,
-      markdown,
-      delay,
-      email,
-      call,
-      icon,
-      sequenceId,
-      disableCache,
-      disableFirebase,
-      unifiedPush,
-    });
-
-    if (attach) {
-      headers["Attach"] = attach;
-    }
-
-    // Template query param (yes/true/1 for manual, or a name like 'github')
-    let requestUrl = this.buildTemplateUrl(endpoint, template);
-
-    if (requestUrl !== endpoint && template) {
-      // If separate data is provided, use it as body and message as header template
-      if (jsonData) {
-        if (text) {
-          headers["Message"] = text;
+            this.log.info('ntfy-client adapter started. Waiting for messages...');
+        } catch (error) {
+            if (this.isShuttingDown) {
+                this.log.debug('Startup sequence ended during shutdown. Suppressing startup error handling.');
+                return;
+            }
+            this.log.error(`Adapter startup failed: ${error.message || error}`);
+            try {
+                await this.setStateAsync('info.connection', false, true);
+            } catch (stateError) {
+                this.log.debug(`Could not set info.connection after startup failure: ${stateError.message}`);
+            }
         }
-        text =
-          typeof jsonData === "object" ? JSON.stringify(jsonData) : jsonData;
-      }
     }
 
-    // Apply Authentication
-    const authHeaders = this.getAuthHeaders();
-    Object.assign(headers, authHeaders);
+    /**
+     * Reset all volatile states at startup.
+     */
+    async resetRuntimeStates() {
+        await this.resetInfoStates();
+        await this.resetStatsStates();
+        await this.resetConfiguredTopicStates();
+    }
 
-    try {
-      const debugParams = this.buildDebugParams({
-        text,
-        title,
-        priority,
-        tags,
-        click,
-        attach,
-        filename,
-        actions,
-        markdown,
-        delay,
-        email,
-        call,
-        icon,
-        sequenceId,
-        disableCache,
-        disableFirebase,
-        unifiedPush,
-        template,
-      });
+    /**
+     * Reset info states to defaults.
+     */
+    async resetInfoStates() {
+        await this.setInitialStateAsync('info.connection', false);
+        await this.setInitialStateAsync('info.serverVersion', '');
+        await this.setInitialStateAsync('info.updateAvailable', false);
+        await this.setInitialStateAsync('info.latestVersion', '');
+    }
 
-      this.log.debug(
-        `Sending notification to topic "${topic}" (${debugParams.join(", ")})`,
-      );
-      const authType = this.getConfiguredAuthType();
-      const safeHeaders = this.sanitizeHeadersForLog(headers);
-      this.log.debug(
-        `POST request to ${requestUrl} with headers: ${JSON.stringify(safeHeaders)} (authType: ${authType})`,
-      );
-      const response = await axios.post(requestUrl, text, {
-        headers,
-        timeout: 10000,
-      });
-      this.log.debug(
-        `Notification successfully sent to topic "${topic}" (HTTP ${response.status})`,
-      );
+    /**
+     * Reset stats states to defaults.
+     */
+    async resetStatsStates() {
+        const numberStates = [
+            'stats.messages.published',
+            'stats.messages.remaining',
+            'stats.messages.limit',
+            'stats.messages.expiryDuration',
+            'stats.emails.sent',
+            'stats.emails.remaining',
+            'stats.emails.limit',
+            'stats.calls.made',
+            'stats.calls.remaining',
+            'stats.calls.limit',
+            'stats.reservations.count',
+            'stats.reservations.remaining',
+            'stats.reservations.limit',
+            'stats.attachments.storage',
+            'stats.attachments.storageRemaining',
+            'stats.attachments.storageLimit',
+            'stats.attachments.expiryDuration',
+            'stats.attachments.fileSizeLimit',
+            'stats.attachments.bandwidthLimit',
+        ];
 
-      // Refresh account stats and reset connection state after sending
-      await this.setStateAsync("info.connection", true, true);
-      await this.fetchAccountStats();
+        for (const id of numberStates) {
+            await this.setInitialStateAsync(id, 0);
+        }
 
-      return response.data || {};
-    } catch (error) {
-      this.log.error(
-        `Failed to send notification to topic "${topic}": ${error.message}`,
-      );
-      if (error.response) {
-        const status = error.response.status;
-        const data = this.formatErrorResponse(error.response.data);
-        throw new Error(`ntfy server returned HTTP ${status}: ${data}`, {
-          cause: error,
+        await this.setInitialStateAsync('stats.account.tier', '');
+    }
+
+    /**
+     * Reset message states for configured topics.
+     */
+    async resetConfiguredTopicStates() {
+        const topics = this.config.topics || [];
+        const topicDefaults = {
+            lastMessage: '',
+            lastTitle: '',
+            lastPriority: 0,
+            lastTags: '',
+            lastClick: '',
+            lastAttachmentUrl: '',
+            lastTimestamp: 0,
+            lastMessageId: '',
+            lastSequenceId: '',
+            lastTopic: '',
+            lastEvent: '',
+            lastIcon: '',
+            lastActions: '',
+            lastAttachmentName: '',
+            lastAttachmentType: '',
+            lastAttachmentSize: 0,
+            lastAttachmentExpires: 0,
+            lastExpires: 0,
+            lastJson: '',
+            subscribed: false,
+        };
+
+        for (const topicConfig of topics) {
+            const topicInfo = this.normalizeTopicConfig(topicConfig);
+            if (!topicInfo) {
+                continue;
+            }
+            const { topicName, displayName } = topicInfo;
+            await this.createTopicStates(topicName, displayName);
+
+            const safeName = this.sanitizeTopicName(topicName);
+            for (const [suffix, defaultValue] of Object.entries(topicDefaults)) {
+                await this.setInitialStateAsync(`topics.${safeName}.${suffix}`, defaultValue);
+            }
+        }
+    }
+
+    /**
+     * Create the object structure for states
+     */
+    async createObjectStructure() {
+        // Folders
+        await this.setObjectNotExistsAsync('stats', {
+            type: 'folder',
+            common: {
+                name: 'Statistics',
+            },
+            native: {},
         });
-      } else if (error.request) {
-        throw new Error(
-          `No response from ntfy server at ${url}. Please check the server URL and network connectivity.`,
-          { cause: error },
-        );
-      } else {
-        throw error;
-      }
-    }
-  }
 
-  /**
-   * Send a notification with a local file attachment via PUT.
-   *
-   * @param {object} opts Notification options
-   * @param {string} opts.url Server URL
-   * @param {string} opts.topic Topic name
-   * @param {string} opts.text Message text
-   * @param {string} opts.title Title
-   * @param {string} opts.priority Priority
-   * @param {string} opts.tags Tags
-   * @param {string} opts.click Click URL
-   * @param {string} opts.filename Filename
-   * @param {string|object} opts.actions Actions
-   * @param {boolean} opts.markdown Markdown enabled
-   * @param {string} opts.delay Delay
-   * @param {string} opts.email Email
-   * @param {string} opts.call Call
-   * @param {string} opts.icon Icon URL
-   * @param {string} opts.sequenceId Sequence ID
-   * @param {string|boolean} opts.disableCache Disable server-side caching
-   * @param {string|boolean} opts.disableFirebase Disable Firebase Cloud Messaging
-   * @param {string} opts.unifiedPush UnifiedPush control
-   * @param {string} opts.template Template control
-   * @param {string} opts.filePath Path to the file to attach
-   * @param {string|object} [opts.jsonData] JSON data for templating
-   * @returns {Promise<object>} The response data
-   */
-  async sendWithFileAttachment(opts) {
-    const {
-      url,
-      topic,
-      text,
-      title,
-      priority,
-      tags,
-      click,
-      actions,
-      markdown,
-      delay,
-      email,
-      call,
-      icon,
-      sequenceId,
-      disableCache,
-      disableFirebase,
-      unifiedPush,
-      template,
-      filePath,
-      jsonData,
-    } = opts;
+        await this.setObjectNotExistsAsync('stats.account', {
+            type: 'folder',
+            common: {
+                name: 'Account',
+            },
+            native: {},
+        });
 
-    let { filename } = opts;
+        await this.setObjectNotExistsAsync('stats.messages', {
+            type: 'folder',
+            common: {
+                name: 'Messages',
+            },
+            native: {},
+        });
 
-    this.log.debug(`sendWithFileAttachment called for file: ${filePath}`);
-    const endpoint = `${url}/${encodeURIComponent(topic)}`;
-    this.log.debug(`Sending file attachment to endpoint: ${endpoint}`);
+        await this.setObjectNotExistsAsync('stats.emails', {
+            type: 'folder',
+            common: {
+                name: 'Emails',
+            },
+            native: {},
+        });
 
-    // Determine filename from path if not specified
-    if (!filename) {
-      filename = path.basename(filePath);
-    }
+        await this.setObjectNotExistsAsync('stats.calls', {
+            type: 'folder',
+            common: {
+                name: 'Calls',
+            },
+            native: {},
+        });
 
-    // Check if the file size exceeds the server's limits if stats are available
-    try {
-      const fileStats = await fs.promises.stat(filePath);
-      const fileSize = fileStats.size;
+        await this.setObjectNotExistsAsync('stats.reservations', {
+            type: 'folder',
+            common: {
+                name: 'Reservations',
+            },
+            native: {},
+        });
 
-      const storageRemainingState = await this.getStateAsync(
-        "stats.attachments.storageRemaining",
-      );
-      const fileSizeLimitState = await this.getStateAsync(
-        "stats.attachments.fileSizeLimit",
-      );
+        await this.setObjectNotExistsAsync('stats.attachments', {
+            type: 'folder',
+            common: {
+                name: 'Attachments',
+            },
+            native: {},
+        });
 
-      if (
-        fileSizeLimitState &&
-        fileSizeLimitState.val !== null &&
-        fileSizeLimitState.val > 0
-      ) {
-        if (fileSize > fileSizeLimitState.val) {
-          throw new Error(
-            `File size (${fileSize} bytes) exceeds the ntfy server's file size limit (${fileSizeLimitState.val} bytes).`,
-          );
+        await this.setObjectNotExistsAsync('topics', {
+            type: 'folder',
+            common: {
+                name: 'Topics',
+            },
+            native: {},
+        });
+
+        // Info states
+        await this.setObjectNotExistsAsync('info.connection', {
+            type: 'state',
+            common: {
+                name: 'Connection status',
+                type: 'boolean',
+                role: 'indicator.connected',
+                read: true,
+                write: false,
+                def: false,
+            },
+            native: {},
+        });
+
+        await this.setObjectNotExistsAsync('info.serverVersion', {
+            type: 'state',
+            common: {
+                name: 'ntfy server version',
+                type: 'string',
+                role: 'text',
+                read: true,
+                write: false,
+                def: '',
+            },
+            native: {},
+        });
+
+        await this.setObjectNotExistsAsync('info.updateAvailable', {
+            type: 'state',
+            common: {
+                name: 'Server update available',
+                type: 'boolean',
+                role: 'indicator',
+                read: true,
+                write: false,
+                def: false,
+            },
+            native: {},
+        });
+
+        await this.setObjectNotExistsAsync('info.latestVersion', {
+            type: 'state',
+            common: {
+                name: 'Latest ntfy server version available',
+                type: 'string',
+                role: 'text',
+                read: true,
+                write: false,
+                def: '',
+            },
+            native: {},
+        });
+
+        // Account statistics
+        const statsStates = [
+            // Message stats
+            {
+                id: 'stats.messages.published',
+                name: 'Messages published today',
+                type: 'number',
+                role: 'value',
+            },
+            {
+                id: 'stats.messages.remaining',
+                name: 'Messages remaining',
+                type: 'number',
+                role: 'value',
+            },
+            {
+                id: 'stats.messages.limit',
+                name: 'Messages usage limit',
+                type: 'number',
+                role: 'value',
+            },
+            {
+                id: 'stats.messages.expiryDuration',
+                name: 'Messages expiry duration (seconds)',
+                type: 'number',
+                role: 'value.interval',
+                unit: 's',
+            },
+            // Email stats
+            {
+                id: 'stats.emails.sent',
+                name: 'Emails sent today',
+                type: 'number',
+                role: 'value',
+            },
+            {
+                id: 'stats.emails.remaining',
+                name: 'Emails remaining',
+                type: 'number',
+                role: 'value',
+            },
+            {
+                id: 'stats.emails.limit',
+                name: 'Email usage limit',
+                type: 'number',
+                role: 'value',
+            },
+            // Phone call stats
+            {
+                id: 'stats.calls.made',
+                name: 'Phone calls made today',
+                type: 'number',
+                role: 'value',
+            },
+            {
+                id: 'stats.calls.remaining',
+                name: 'Phone calls remaining',
+                type: 'number',
+                role: 'value',
+            },
+            {
+                id: 'stats.calls.limit',
+                name: 'Phone calls usage limit',
+                type: 'number',
+                role: 'value',
+            },
+            // Reserved topics
+            {
+                id: 'stats.reservations.count',
+                name: 'Reserved topics',
+                type: 'number',
+                role: 'value',
+            },
+            {
+                id: 'stats.reservations.remaining',
+                name: 'Reserved topics remaining',
+                type: 'number',
+                role: 'value',
+            },
+            {
+                id: 'stats.reservations.limit',
+                name: 'Reserved topics limit',
+                type: 'number',
+                role: 'value',
+            },
+            // Attachment stats
+            {
+                id: 'stats.attachments.storage',
+                name: 'Attachment storage used (bytes)',
+                type: 'number',
+                role: 'value',
+                unit: 'bytes',
+            },
+            {
+                id: 'stats.attachments.storageRemaining',
+                name: 'Attachment storage remaining (bytes)',
+                type: 'number',
+                role: 'value',
+                unit: 'bytes',
+            },
+            {
+                id: 'stats.attachments.storageLimit',
+                name: 'Attachment storage limit (bytes)',
+                type: 'number',
+                role: 'value',
+                unit: 'bytes',
+            },
+            {
+                id: 'stats.attachments.expiryDuration',
+                name: 'Attachment expiry duration (seconds)',
+                type: 'number',
+                role: 'value.interval',
+                unit: 's',
+            },
+            {
+                id: 'stats.attachments.fileSizeLimit',
+                name: 'Attachment file size limit (bytes)',
+                type: 'number',
+                role: 'value',
+                unit: 'bytes',
+            },
+            {
+                id: 'stats.attachments.bandwidthLimit',
+                name: 'Attachment bandwidth limit (bytes)',
+                type: 'number',
+                role: 'value',
+                unit: 'bytes',
+            },
+            // Account
+            {
+                id: 'stats.account.tier',
+                name: 'Subscription tier',
+                type: 'string',
+                role: 'info.status',
+            },
+        ];
+
+        for (const state of statsStates) {
+            await this.setObjectNotExistsAsync(state.id, {
+                type: 'state',
+                common: {
+                    name: state.name,
+                    type: state.type,
+                    role: state.role,
+                    read: true,
+                    write: false,
+                    unit: state.unit || undefined,
+                    def: state.type === 'number' ? 0 : '',
+                },
+                native: {},
+            });
         }
-      }
 
-      if (
-        storageRemainingState &&
-        storageRemainingState.val !== null &&
-        storageRemainingState.val >= 0
-      ) {
-        // Only check if limited (some servers might return a huge number for unlimited, or null)
-        if (fileSize > storageRemainingState.val) {
-          throw new Error(
-            `File size (${fileSize} bytes) exceeds the remaining storage space on the ntfy server (${storageRemainingState.val} bytes).`,
-          );
+        // Create topic folder structure for subscribed topics
+        const topics = this.config.topics || [];
+        for (const topicConfig of topics) {
+            const topicInfo = this.normalizeTopicConfig(topicConfig);
+            if (topicInfo) {
+                await this.createTopicStates(topicInfo.topicName, topicInfo.displayName);
+            }
         }
-      }
-    } catch (e) {
-      const errorMessage = e?.message || String(e);
-      if (errorMessage.includes("exceeds")) {
-        throw e;
-      }
-      this.log.debug(`Could not pre-check file limits: ${errorMessage}`);
     }
 
-    const headers = {
-      "Content-Type": "application/octet-stream",
-      ...this.buildCommonHeaders({
-        title,
-        priority,
-        tags,
-        click,
-        filename,
-        actions,
-        markdown,
-        delay,
-        email,
-        call,
-        icon,
-        sequenceId,
-        disableCache,
-        disableFirebase,
-        unifiedPush,
-      }),
-    };
+    /**
+     * Create states for a subscribed topic.
+     *
+     * @param {string} topicName - The topic name
+     * @param {string} [displayName] - Optional display name for the topic channel
+     */
+    async createTopicStates(topicName, displayName) {
+        const safeName = this.sanitizeTopicName(topicName);
 
-    if (text) {
-      headers["Message"] = text;
+        // Create/Update channel object for the topic (using extendObjectAsync to ensure name updates from config are applied)
+        await this.extendObjectAsync(`topics.${safeName}`, {
+            type: 'channel',
+            common: {
+                name: displayName || topicName,
+            },
+            native: {},
+        });
+
+        const topicStates = [
+            {
+                id: `topics.${safeName}.lastMessage`,
+                name: 'Last received message',
+                type: 'string',
+                role: 'text',
+            },
+            {
+                id: `topics.${safeName}.lastTitle`,
+                name: 'Last received title',
+                type: 'string',
+                role: 'text',
+            },
+            {
+                id: `topics.${safeName}.lastPriority`,
+                name: 'Last received priority',
+                type: 'number',
+                role: 'value',
+            },
+            {
+                id: `topics.${safeName}.lastTags`,
+                name: 'Last received tags',
+                type: 'string',
+                role: 'text',
+            },
+            {
+                id: `topics.${safeName}.lastClick`,
+                name: 'Last received click URL',
+                type: 'string',
+                role: 'text.url',
+            },
+            {
+                id: `topics.${safeName}.lastAttachmentUrl`,
+                name: 'Last received attachment URL',
+                type: 'string',
+                role: 'text.url',
+            },
+            {
+                id: `topics.${safeName}.lastTimestamp`,
+                name: 'Last message timestamp',
+                type: 'number',
+                role: 'date',
+            },
+            {
+                id: `topics.${safeName}.lastMessageId`,
+                name: 'Last message ID',
+                type: 'string',
+                role: 'text',
+            },
+            {
+                id: `topics.${safeName}.lastSequenceId`,
+                name: 'Last sequence ID',
+                type: 'string',
+                role: 'text',
+            },
+            {
+                id: `topics.${safeName}.lastTopic`,
+                name: 'Last received topic',
+                type: 'string',
+                role: 'text',
+            },
+            {
+                id: `topics.${safeName}.lastEvent`,
+                name: 'Last received event',
+                type: 'string',
+                role: 'text',
+            },
+            {
+                id: `topics.${safeName}.lastIcon`,
+                name: 'Last received icon URL',
+                type: 'string',
+                role: 'text.url',
+            },
+            {
+                id: `topics.${safeName}.lastActions`,
+                name: 'Last received actions (JSON)',
+                type: 'string',
+                role: 'json',
+            },
+            {
+                id: `topics.${safeName}.lastAttachmentName`,
+                name: 'Last received attachment name',
+                type: 'string',
+                role: 'text',
+            },
+            {
+                id: `topics.${safeName}.lastAttachmentType`,
+                name: 'Last received attachment type',
+                type: 'string',
+                role: 'text',
+            },
+            {
+                id: `topics.${safeName}.lastAttachmentSize`,
+                name: 'Last received attachment size',
+                type: 'number',
+                role: 'value',
+                unit: 'bytes',
+            },
+            {
+                id: `topics.${safeName}.lastAttachmentExpires`,
+                name: 'Last received attachment expiry',
+                type: 'number',
+                role: 'date',
+            },
+            {
+                id: `topics.${safeName}.lastExpires`,
+                name: 'Last message expiry',
+                type: 'number',
+                role: 'date',
+            },
+            {
+                id: `topics.${safeName}.lastJson`,
+                name: 'Last received full JSON',
+                type: 'string',
+                role: 'json',
+            },
+            {
+                id: `topics.${safeName}.subscribed`,
+                name: 'Subscription active',
+                type: 'boolean',
+                role: 'indicator',
+            },
+        ];
+
+        for (const state of topicStates) {
+            const defValue = state.type === 'number' ? 0 : state.type === 'boolean' ? false : '';
+            await this.setObjectNotExistsAsync(state.id, {
+                type: 'state',
+                common: {
+                    name: state.name,
+                    type: state.type,
+                    role: state.role,
+                    read: true,
+                    write: false,
+                    def: defValue,
+                    unit: state.unit,
+                },
+                native: {},
+            });
+        }
     }
 
-    // Template query param (yes/true/1 for manual, or a name like 'github')
-    const requestUrl = this.buildTemplateUrl(endpoint, template);
-
-    if (requestUrl !== endpoint && template) {
-      // If separate data is provided, use it as headers (X-...) for file uploads
-      if (jsonData && typeof jsonData === "object") {
-        for (const [key, value] of Object.entries(jsonData)) {
-          // ntfy uses these as {{.key}}
-          headers[`X-${key}`] =
-            typeof value === "object" ? JSON.stringify(value) : String(value);
+    /**
+     * Sanitize topic name for use as state ID.
+     *
+     * @param {string} topicName - The topic name
+     * @returns {string} Sanitized name
+     */
+    sanitizeTopicName(topicName) {
+        if (typeof topicName !== 'string') {
+            return '';
         }
-      } else if (jsonData) {
+        return topicName.replace(/[^a-zA-Z0-9_-]/g, '_');
+    }
+
+    /**
+     * Normalize and validate a topic configuration entry.
+     *
+     * @param {any} topicConfig - Topic entry from native config
+     * @returns {{ topicName: string; displayName: string } | null} Normalized topic entry or null if invalid
+     */
+    normalizeTopicConfig(topicConfig) {
+        let topicName = '';
+        let displayName = '';
+
+        if (typeof topicConfig === 'string') {
+            topicName = topicConfig;
+        } else if (topicConfig && typeof topicConfig === 'object') {
+            if (typeof topicConfig.topic === 'string') {
+                topicName = topicConfig.topic;
+            }
+            if (typeof topicConfig.displayName === 'string') {
+                displayName = topicConfig.displayName;
+            }
+        }
+
+        topicName = topicName.trim();
+        if (!topicName) {
+            return null;
+        }
+
+        return {
+            topicName,
+            displayName: displayName.trim(),
+        };
+    }
+
+    /**
+     * Get authentication headers.
+     *
+     * @returns {object} Headers object with auth
+     */
+    getAuthHeaders() {
+        const headers = {};
+        if (this.config.authType === 'user' && this.config.user && this.config.pass) {
+            const credentials = `${this.config.user}:${this.config.pass}`;
+            headers['Authorization'] = `Basic ${Buffer.from(credentials).toString('base64')}`;
+        } else if (this.config.authType === 'token' && this.config.token) {
+            headers['Authorization'] = `Bearer ${this.config.token}`;
+        }
+        return headers;
+    }
+
+    /**
+     * Log warnings with throttling to prevent repeated identical entries.
+     *
+     * @param {string} key - Unique key for the warning source
+     * @param {string} message - Warning message to log
+     * @param {number} throttleMs - Throttle window in milliseconds
+     */
+    logWarnThrottled(key, message, throttleMs) {
+        const now = Date.now();
+        const state = this.warnLogState.get(key) || {
+            lastMessage: '',
+            lastWarnTs: 0,
+            suppressedCount: 0,
+        };
+
+        const isSameMessage = state.lastMessage === message;
+        const inThrottleWindow = now - state.lastWarnTs < throttleMs;
+
+        if (isSameMessage && inThrottleWindow) {
+            state.suppressedCount += 1;
+            this.warnLogState.set(key, state);
+            return;
+        }
+
+        const suppressedSuffix =
+            state.suppressedCount > 0 ? ` (${state.suppressedCount} similar warnings suppressed)` : '';
+        this.log.warn(`${message}${suppressedSuffix}`);
+
+        state.lastMessage = message;
+        state.lastWarnTs = now;
+        state.suppressedCount = 0;
+        this.warnLogState.set(key, state);
+    }
+
+    /**
+     * Reset warning throttling state for a key.
+     *
+     * @param {string} key - Warning key to reset
+     */
+    resetWarnThrottle(key) {
+        this.warnLogState.delete(key);
+    }
+
+    /**
+     * Log SSE errors with throttling to avoid repeated warnings during outages.
+     *
+     * @param {string} topicName - Topic name
+     * @param {Error|any} error - SSE error object
+     */
+    logSseError(topicName, error) {
+        const errorMessage = error?.message || 'Connection error';
+        const now = Date.now();
+
+        const state = this.sseErrorLogState.get(topicName) || {
+            lastErrorMessage: '',
+            lastWarnTs: 0,
+            suppressedCount: 0,
+        };
+
+        const isSameError = state.lastErrorMessage === errorMessage;
+        const inThrottleWindow = now - state.lastWarnTs < SSE_ERROR_LOG_THROTTLE_MS;
+
+        if (isSameError && inThrottleWindow) {
+            state.suppressedCount += 1;
+            this.sseErrorLogState.set(topicName, state);
+            return;
+        }
+
+        const suppressedSuffix =
+            state.suppressedCount > 0 ? ` (${state.suppressedCount} similar warnings suppressed)` : '';
         this.log.warn(
-          "jsonData for file attachments with templates must be an object to be sent as headers.",
+            `SSE error for topic "${topicName}": ${errorMessage}. Will retry automatically.${suppressedSuffix}`,
         );
-      }
+
+        state.lastErrorMessage = errorMessage;
+        state.lastWarnTs = now;
+        state.suppressedCount = 0;
+        this.sseErrorLogState.set(topicName, state);
     }
 
-    // Apply Authentication
-    const authHeaders = this.getAuthHeaders();
-    Object.assign(headers, authHeaders);
+    /**
+     * Log a summary when SSE connection recovered after suppressed errors.
+     *
+     * @param {string} topicName - Topic name
+     */
+    logSseRecovery(topicName) {
+        const state = this.sseErrorLogState.get(topicName);
+        if (state && state.suppressedCount > 0) {
+            this.log.info(
+                `SSE connection restored for topic "${topicName}" (${state.suppressedCount} repeated errors were suppressed).`,
+            );
+        }
+        this.sseErrorLogState.delete(topicName);
+    }
 
-    try {
-      const debugFileParams = this.buildDebugParams({
-        text,
-        title,
-        priority,
-        tags,
-        click,
-        filename,
-        actions,
-        markdown,
-        delay,
-        email,
-        call,
-        icon,
-        sequenceId,
-        disableCache,
-        disableFirebase,
-        unifiedPush,
-        template,
-      });
+    /**
+     * Format the error response data for logging.
+     *
+     * @param {any} data - The error response data
+     * @returns {string} Formatted error data
+     */
+    formatErrorResponse(data) {
+        if (!data) {
+            return 'No response data';
+        }
 
-      this.log.debug(
-        `Sending file attachment "${filename}" to topic "${topic}" (${debugFileParams.join(", ")})`,
-      );
-      this.log.debug(`Reading file: ${filePath}`);
-      const fileData = await fs.promises.readFile(filePath);
-      this.log.debug(`File size: ${fileData.length} bytes`);
-      const response = await axios.put(requestUrl, fileData, {
-        headers,
-        timeout: 30000,
-      });
-      this.log.debug(
-        `File attachment successfully sent to topic "${topic}" (HTTP ${response.status})`,
-      );
+        if (typeof data === 'object') {
+            try {
+                return JSON.stringify(data);
+            } catch {
+                return 'Invalid object structure';
+            }
+        }
 
-      // Refresh account stats and reset connection state after sending
-      await this.setStateAsync("info.connection", true, true);
-      await this.fetchAccountStats();
+        if (typeof data === 'string') {
+            const trimmed = data.trim();
+            if (trimmed.toLowerCase().startsWith('<!doctype') || trimmed.toLowerCase().startsWith('<html')) {
+                // It's likely HTML, probably a proxy error page (like Nginx 502)
+                const titleMatch = trimmed.match(/<title>(.*?)<\/title>/i);
+                if (titleMatch && titleMatch[1]) {
+                    return `HTML Error: ${titleMatch[1].trim()}`;
+                }
 
-      return response.data || {};
-    } catch (error) {
-      this.log.error(
-        `Failed to send file attachment to topic "${topic}": ${error.message}`,
-      );
-      if (error.code === "ENOENT") {
-        throw new Error(`File not found: ${filePath}`, { cause: error });
-      }
-      if (error.response) {
-        const status = error.response.status;
-        const data = this.formatErrorResponse(error.response.data);
-        throw new Error(`ntfy server returned HTTP ${status}: ${data}`, {
-          cause: error,
+                // Fallback: extract some text from body if possible
+                const bodyMatch = trimmed.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
+                if (bodyMatch && bodyMatch[1]) {
+                    const bodyText = bodyMatch[1]
+                        .replace(/<[^>]+>/g, ' ')
+                        .replace(/\s+/g, ' ')
+                        .trim();
+                    if (bodyText) {
+                        return `HTML Error: ${bodyText.substring(0, 150)}${bodyText.length > 150 ? '...' : ''}`;
+                    }
+                }
+
+                return `HTML Error: ${trimmed.substring(0, 100)}${trimmed.length > 100 ? '...' : ''}`;
+            }
+            return trimmed;
+        }
+
+        return String(data);
+    }
+
+    /**
+     * Remove orphaned topics from ioBroker that are no longer in the configuration.
+     */
+    async cleanupTopics() {
+        this.log.debug('Starting topic cleanup process...');
+
+        try {
+            const currentTopics = new Set();
+            for (const topicConfig of this.config.topics || []) {
+                const topicInfo = this.normalizeTopicConfig(topicConfig);
+                if (topicInfo) {
+                    currentTopics.add(this.sanitizeTopicName(topicInfo.topicName));
+                }
+            }
+
+            // Get all existing topic objects
+            const objects = await this.getAdapterObjectsAsync();
+            const topicPrefix = `${this.namespace}.topics.`;
+
+            // Find unique topic names from the object tree
+            const existingTopics = new Set();
+            for (const id of Object.keys(objects)) {
+                if (id.startsWith(topicPrefix)) {
+                    const parts = id.replace(topicPrefix, '').split('.');
+                    if (parts[0]) {
+                        existingTopics.add(parts[0]);
+                    }
+                }
+            }
+
+            // Delete topics that are no longer in config
+            for (const topicId of existingTopics) {
+                if (!currentTopics.has(topicId)) {
+                    this.log.info(`Topic "${topicId}" is no longer in configuration. Deleting objects...`);
+                    // Delete the entire channel/folder and all its states
+                    await this.delObjectAsync(`topics.${topicId}`, { recursive: true });
+                }
+            }
+        } catch (error) {
+            this.log.error(`Failed to cleanup orphaned topics: ${error.message}`);
+        }
+    }
+
+    /**
+     * Subscribe to configured topics via SSE (Server-Sent Events).
+     */
+    async subscribeToTopics() {
+        this.log.debug('Starting topic subscription process...');
+        const topics = this.config.topics || [];
+        this.log.debug(`Found ${topics.length} topics to subscribe to: ${JSON.stringify(topics)}`);
+
+        const url = (this.config.url || 'https://ntfy.sh').replace(/\/+$/, '');
+
+        for (const topicConfig of topics) {
+            const topicInfo = this.normalizeTopicConfig(topicConfig);
+            if (!topicInfo) {
+                continue;
+            }
+
+            const { topicName, displayName } = topicInfo;
+
+            try {
+                this.log.debug(
+                    `Attempting to subscribe to topic: ${topicName} (Display Name: ${displayName || 'none'})`,
+                );
+                await this.subscribeToTopic(url, topicName, displayName);
+                this.log.debug(`Successfully subscribed to topic: ${topicName}`);
+            } catch (error) {
+                this.log.error(`Failed to subscribe to topic "${topicName}": ${error.message}`);
+            }
+        }
+    }
+
+    /**
+     * Subscribe to a single topic via SSE.
+     *
+     * @param {string} url - Server URL
+     * @param {string} topicName - Topic name
+     * @param {string} [displayName] - Optional display name
+     */
+    async subscribeToTopic(url, topicName, displayName) {
+        this.log.debug(`Creating SSE subscription for topic "${topicName}"...`);
+        const safeName = this.sanitizeTopicName(topicName);
+
+        const existingSubscription = this.subscriptions.get(topicName);
+        if (existingSubscription) {
+            this.log.debug(`Closing existing SSE subscription for topic "${topicName}" before re-subscribing.`);
+            try {
+                existingSubscription.close();
+            } catch (error) {
+                this.log.debug(`Could not close previous SSE subscription for topic "${topicName}": ${error.message}`);
+            }
+            this.subscriptions.delete(topicName);
+        }
+
+        // Create objects first
+        await this.createTopicStates(topicName, displayName);
+
+        const sseUrl = `${url}/${encodeURIComponent(topicName)}/sse`;
+        this.log.debug(`SSE URL: ${sseUrl}`);
+
+        // Build URL-safe authentication parameter for SSE
+        let authUrl = sseUrl;
+        if (this.config.authType === 'token' && this.config.token) {
+            // Use official ?token parameter for token auth
+            authUrl += `?token=${encodeURIComponent(this.config.token)}`;
+        } else if (this.config.authType === 'user' && this.config.user && this.config.pass) {
+            // For basic auth, ntfy expects ?auth=Base64("Basic Base64(user:pass)")
+            // Use URL-safe base64: replace + with -, / with _, strip = padding
+            const credentials = `${this.config.user}:${this.config.pass}`;
+            const basicAuthValue = `Basic ${Buffer.from(credentials).toString('base64')}`;
+            const encodedAuth = Buffer.from(basicAuthValue)
+                .toString('base64')
+                .replace(/\+/g, '-')
+                .replace(/\//g, '_')
+                .replace(/=+$/, '');
+            authUrl += `?auth=${encodedAuth}`;
+        }
+
+        this.log.info(`Subscribing to topic "${topicName}" at ${sseUrl}`);
+        this.log.debug(`SSE connection created for topic "${topicName}" (parameters masked)`);
+
+        const es = new EventSource(authUrl);
+
+        es.onopen = () => {
+            this.log.debug(`SSE connection opened for topic "${topicName}"`);
+            this.logSseRecovery(topicName);
+            void Promise.all([
+                this.setStateAsync(`topics.${safeName}.subscribed`, true, true),
+                this.setStateAsync('info.connection', true, true),
+            ]).catch(error => {
+                this.logWarnThrottled(
+                    `sseOpenState:${topicName}`,
+                    `Failed to update SSE connection states for topic "${topicName}": ${error.message}`,
+                    GENERAL_WARN_LOG_THROTTLE_MS,
+                );
+            });
+        };
+
+        es.addEventListener('message', event => {
+            try {
+                const data = JSON.parse(event.data);
+                if (data.event === 'message') {
+                    void this.handleIncomingMessage(topicName, data).catch(error => {
+                        this.log.error(`Failed to process incoming message for topic "${topicName}": ${error.message}`);
+                    });
+                }
+            } catch (error) {
+                this.logWarnThrottled(
+                    `sseParse:${topicName}`,
+                    `Failed to parse SSE message for topic "${topicName}": ${error.message}`,
+                    SSE_PARSE_WARN_LOG_THROTTLE_MS,
+                );
+            }
         });
-      } else if (error.request) {
-        throw new Error(
-          `No response from ntfy server at ${url}. Please check the server URL and network connectivity.`,
-          { cause: error },
-        );
-      } else {
-        throw error;
-      }
-    }
-  }
 
-  /**
-   * Dismiss a notification (mark as read).
-   *
-   * @param {string|object} msgObj The message object or ID
-   * @returns {Promise<object>} The response data
-   */
-  async dismissNotification(msgObj) {
-    this.log.debug(
-      `dismissNotification called with: ${JSON.stringify(msgObj)}`,
-    );
-    let topic = "";
-    let messageOrSequenceId = "";
+        es.onerror = error => {
+            this.logSseError(topicName, error);
+            void this.setStateAsync(`topics.${safeName}.subscribed`, false, true).catch(stateError => {
+                this.log.debug(`Failed to set subscribed=false for topic "${topicName}": ${stateError.message}`);
+            });
+        };
 
-    if (msgObj && typeof msgObj === "object") {
-      topic = msgObj.topic || "";
-      messageOrSequenceId = msgObj.sequence_id || "";
-    } else {
-      messageOrSequenceId = msgObj;
+        this.log.debug(`SSE EventSource created for topic "${topicName}", waiting for connection...`);
+
+        this.subscriptions.set(topicName, es);
     }
 
-    if (!topic) {
-      topic = this.config.defaultTopic || "";
+    /**
+     * Handle an incoming message from a subscribed topic.
+     *
+     * @param {string} topicName - Topic name
+     * @param {object} data - Message data
+     */
+    async handleIncomingMessage(topicName, data) {
+        const safeName = this.sanitizeTopicName(topicName);
+
+        this.log.debug(`Received message on topic "${topicName}": ${JSON.stringify(data)}`);
+
+        try {
+            // Any incoming message confirms connection is alive
+            await this.setStateAsync('info.connection', true, true);
+
+            await this.setStateAsync(`topics.${safeName}.lastMessage`, data.message || '', true);
+            await this.setStateAsync(`topics.${safeName}.lastTitle`, data.title || '', true);
+            await this.setStateAsync(`topics.${safeName}.lastPriority`, data.priority || 3, true);
+            await this.setStateAsync(
+                `topics.${safeName}.lastTags`,
+                Array.isArray(data.tags) ? data.tags.join(',') : String(data.tags || ''),
+                true,
+            );
+            await this.setStateAsync(`topics.${safeName}.lastClick`, data.click || '', true);
+
+            const attachUrl = data.attachment && data.attachment.url ? data.attachment.url : '';
+            await this.setStateAsync(`topics.${safeName}.lastAttachmentUrl`, attachUrl, true);
+            await this.setStateAsync(
+                `topics.${safeName}.lastTimestamp`,
+                data.time ? data.time * 1000 : Date.now(),
+                true,
+            );
+            await this.setStateAsync(`topics.${safeName}.lastMessageId`, data.id || '', true);
+            await this.setStateAsync(`topics.${safeName}.lastSequenceId`, data.sequence_id || '', true);
+            await this.setStateAsync(`topics.${safeName}.lastTopic`, data.topic || '', true);
+            await this.setStateAsync(`topics.${safeName}.lastEvent`, data.event || '', true);
+            await this.setStateAsync(`topics.${safeName}.lastIcon`, data.icon || '', true);
+
+            let actionsStr = '';
+            if (data.actions) {
+                try {
+                    actionsStr = JSON.stringify(data.actions);
+                } catch {
+                    actionsStr = String(data.actions);
+                }
+            }
+            await this.setStateAsync(`topics.${safeName}.lastActions`, actionsStr, true);
+            await this.setStateAsync(
+                `topics.${safeName}.lastAttachmentName`,
+                data.attachment && data.attachment.name ? data.attachment.name : '',
+                true,
+            );
+            await this.setStateAsync(
+                `topics.${safeName}.lastAttachmentType`,
+                data.attachment && data.attachment.type ? data.attachment.type : '',
+                true,
+            );
+            await this.setStateAsync(
+                `topics.${safeName}.lastAttachmentSize`,
+                data.attachment && data.attachment.size ? data.attachment.size : 0,
+                true,
+            );
+            await this.setStateAsync(
+                `topics.${safeName}.lastAttachmentExpires`,
+                data.attachment && data.attachment.expires ? data.attachment.expires * 1000 : 0,
+                true,
+            );
+            await this.setStateAsync(`topics.${safeName}.lastExpires`, data.expires ? data.expires * 1000 : 0, true);
+            await this.setStateAsync(`topics.${safeName}.lastJson`, JSON.stringify(data), true);
+        } catch (error) {
+            this.log.error(
+                `Failed to update states for incoming message on topic "${topicName}" (ID: ${data.id || 'unknown'}): ${error.message}`,
+            );
+        }
     }
 
-    if (!topic) {
-      throw new Error("Topic is required to dismiss a notification.");
+    /**
+     * Fetch account statistics from the ntfy server.
+     */
+    async fetchAccountStats() {
+        this.log.debug('Triggering account statistics update...');
+        const url = (this.config.url || 'https://ntfy.sh').replace(/\/+$/, '');
+        const authHeaders = this.getAuthHeaders();
+
+        // Only fetch if authenticated
+        if (!authHeaders['Authorization']) {
+            this.resetWarnThrottle('accountStatsFetchFailed');
+            this.log.debug('Skipping account stats fetch - no authentication configured.');
+            return;
+        }
+
+        try {
+            const response = await axios.get(`${url}/v1/account`, {
+                headers: authHeaders,
+                timeout: 10000,
+            });
+
+            const account = response.data;
+
+            if (account.tier !== undefined || account.role !== undefined) {
+                await this.setStateAsync(
+                    'stats.account.tier',
+                    account.tier !== undefined ? account.tier : account.role !== undefined ? account.role : 'none',
+                    true,
+                );
+            }
+
+            if (account.limits) {
+                const limits = account.limits;
+                await this.setStateAsync(
+                    'stats.messages.limit',
+                    limits.messages !== undefined ? limits.messages : 0,
+                    true,
+                );
+                await this.setStateAsync(
+                    'stats.messages.expiryDuration',
+                    limits.messages_expiry_duration !== undefined ? limits.messages_expiry_duration : 0,
+                    true,
+                );
+                await this.setStateAsync('stats.emails.limit', limits.emails !== undefined ? limits.emails : 0, true);
+                await this.setStateAsync('stats.calls.limit', limits.calls !== undefined ? limits.calls : 0, true);
+                await this.setStateAsync(
+                    'stats.reservations.limit',
+                    limits.reservations !== undefined ? limits.reservations : 0,
+                    true,
+                );
+                await this.setStateAsync(
+                    'stats.attachments.storageLimit',
+                    limits.attachment_total_size !== undefined ? limits.attachment_total_size : 0,
+                    true,
+                );
+                await this.setStateAsync(
+                    'stats.attachments.fileSizeLimit',
+                    limits.attachment_file_size !== undefined ? limits.attachment_file_size : 0,
+                    true,
+                );
+                await this.setStateAsync(
+                    'stats.attachments.expiryDuration',
+                    limits.attachment_expiry_duration !== undefined ? limits.attachment_expiry_duration : 0,
+                    true,
+                );
+                await this.setStateAsync(
+                    'stats.attachments.bandwidthLimit',
+                    limits.attachment_bandwidth !== undefined ? limits.attachment_bandwidth : 0,
+                    true,
+                );
+            }
+
+            if (account.stats) {
+                const stats = account.stats;
+                await this.setStateAsync(
+                    'stats.messages.published',
+                    stats.messages !== undefined ? stats.messages : 0,
+                    true,
+                );
+                await this.setStateAsync(
+                    'stats.messages.remaining',
+                    stats.messages_remaining !== undefined ? stats.messages_remaining : 0,
+                    true,
+                );
+                await this.setStateAsync('stats.emails.sent', stats.emails !== undefined ? stats.emails : 0, true);
+                await this.setStateAsync(
+                    'stats.emails.remaining',
+                    stats.emails_remaining !== undefined ? stats.emails_remaining : 0,
+                    true,
+                );
+                await this.setStateAsync('stats.calls.made', stats.calls !== undefined ? stats.calls : 0, true);
+                await this.setStateAsync(
+                    'stats.calls.remaining',
+                    stats.calls_remaining !== undefined ? stats.calls_remaining : 0,
+                    true,
+                );
+                await this.setStateAsync(
+                    'stats.reservations.count',
+                    stats.reservations !== undefined ? stats.reservations : 0,
+                    true,
+                );
+                await this.setStateAsync(
+                    'stats.reservations.remaining',
+                    stats.reservations_remaining !== undefined ? stats.reservations_remaining : 0,
+                    true,
+                );
+                await this.setStateAsync(
+                    'stats.attachments.storage',
+                    stats.attachment_total_size !== undefined ? stats.attachment_total_size : 0,
+                    true,
+                );
+                await this.setStateAsync(
+                    'stats.attachments.storageRemaining',
+                    stats.attachment_total_size_remaining !== undefined ? stats.attachment_total_size_remaining : 0,
+                    true,
+                );
+            }
+
+            this.log.debug('Account statistics updated successfully.');
+            this.log.debug(`Account data received: ${JSON.stringify(account)}`);
+            this.resetWarnThrottle('accountStatsFetchFailed');
+        } catch (error) {
+            if (error.response && error.response.status === 401) {
+                this.resetWarnThrottle('accountStatsFetchFailed');
+                this.log.debug('Account stats not available - authentication failed or not supported.');
+            } else if (error.response && error.response.status === 404) {
+                this.resetWarnThrottle('accountStatsFetchFailed');
+                this.log.debug('Account stats endpoint not available on this server.');
+            } else {
+                this.logWarnThrottled(
+                    'accountStatsFetchFailed',
+                    `Failed to fetch account statistics: ${error.message || 'Unknown error'}`,
+                    GENERAL_WARN_LOG_THROTTLE_MS,
+                );
+            }
+        }
     }
 
-    if (!messageOrSequenceId) {
-      throw new Error("sequence_id is required to dismiss a notification.");
+    /**
+     * Check the ntfy server version and compare with latest available.
+     */
+    async checkServerVersion() {
+        if (this.isShuttingDown) {
+            return;
+        }
+        this.log.debug('Triggering server version and update check...');
+        const url = (this.config.url || 'https://ntfy.sh').replace(/\/+$/, '');
+        const authHeaders = this.getAuthHeaders();
+
+        try {
+            this.log.debug(`Checking server health at ${url}/v1/health...`);
+            // Get current server health/version
+            const healthResponse = await axios.get(`${url}/v1/health`, {
+                headers: authHeaders,
+                timeout: 10000,
+            });
+
+            if (healthResponse.data && healthResponse.data.healthy) {
+                this.log.debug(`Server connection successful! Server is healthy.`);
+                this.resetWarnThrottle('serverHealthCheck');
+                await this.setStateAsync('info.connection', true, true);
+            } else {
+                this.logWarnThrottled(
+                    'serverHealthCheck',
+                    `Server health check returned unhealthy status: ${JSON.stringify(healthResponse.data)}`,
+                    GENERAL_WARN_LOG_THROTTLE_MS,
+                );
+                await this.setStateAsync('info.connection', false, true);
+            }
+
+            // Schedule next check (6 hours if healthy, 5 minutes if unhealthy)
+            const nextCheckMs = healthResponse.data && healthResponse.data.healthy ? 6 * 60 * 60 * 1000 : 5 * 60 * 1000;
+            this.scheduleNextVersionCheck(nextCheckMs);
+
+            // Try to get server version (admin-only endpoint)
+            try {
+                const versionResponse = await axios.get(`${url}/v1/version`, {
+                    headers: authHeaders,
+                    timeout: 10000,
+                });
+
+                if (versionResponse.data && versionResponse.data.version) {
+                    await this.setStateAsync('info.serverVersion', versionResponse.data.version, true);
+                    this.log.debug(`Server version: ${versionResponse.data.version}`);
+                }
+            } catch {
+                this.log.debug('Server version endpoint not available (requires admin privileges).');
+            }
+
+            // Check for latest version from GitHub releases (only for self-hosted)
+            if (url !== 'https://ntfy.sh') {
+                try {
+                    const githubResponse = await axios.get(
+                        'https://api.github.com/repos/binwiederhier/ntfy/releases/latest',
+                        { timeout: 10000 },
+                    );
+
+                    if (githubResponse.data && githubResponse.data.tag_name) {
+                        const latestVersion = githubResponse.data.tag_name.replace(/^v/, '');
+                        await this.setStateAsync('info.latestVersion', latestVersion, true);
+
+                        const currentVersion = await this.getStateAsync('info.serverVersion');
+                        if (currentVersion && currentVersion.val) {
+                            const isUpdateAvailable = currentVersion.val.toString() !== latestVersion;
+                            await this.setStateAsync('info.updateAvailable', isUpdateAvailable, true);
+                        }
+                    }
+                } catch {
+                    this.log.debug('Failed to check for latest ntfy version on GitHub.');
+                }
+            }
+        } catch (error) {
+            let warningMessage;
+            if (error.response) {
+                if (error.response.status === 404) {
+                    warningMessage =
+                        'Server health check failed (404): No ntfy instance found at this URL. Please verify your Server URL.';
+                } else if (error.response.status === 401) {
+                    warningMessage =
+                        'Server health check failed (401): Authentication rejected. Please check your Username/Password or Access Token.';
+                } else if (error.response.status === 403) {
+                    warningMessage =
+                        'Server health check failed (403): Access forbidden. Ensure you have the right permissions.';
+                } else {
+                    warningMessage = `Server health check failed (${error.response.status}): ${error.message}`;
+                }
+            } else {
+                warningMessage = `Server health check failed: ${error.message}`;
+            }
+            this.logWarnThrottled('serverHealthCheck', warningMessage, GENERAL_WARN_LOG_THROTTLE_MS);
+
+            if (!this.isShuttingDown) {
+                try {
+                    await this.setStateAsync('info.connection', false, true);
+                } catch (stateError) {
+                    this.log.debug(`Could not set info.connection after health check failure: ${stateError.message}`);
+                }
+            }
+
+            // Schedule next check (5 minutes on failure)
+            this.scheduleNextVersionCheck(5 * 60 * 1000);
+        }
     }
 
-    const url = (this.config.url || "https://ntfy.sh").replace(/\/+$/, "");
-    const endpoint = `${url}/${encodeURIComponent(topic)}/${encodeURIComponent(messageOrSequenceId)}/clear`;
+    /**
+     * Schedule the next server version and health check.
+     *
+     * @param {number} ms - Milliseconds until next check
+     */
+    scheduleNextVersionCheck(ms) {
+        if (this.isShuttingDown) {
+            return;
+        }
+        if (this.versionCheckTimer) {
+            this.clearTimeout(this.versionCheckTimer);
+        }
+        this.versionCheckTimer = this.setTimeout(() => {
+            void this.checkServerVersion().catch(error => {
+                this.logWarnThrottled(
+                    'serverVersionTimer',
+                    `Scheduled server version check failed: ${error.message}`,
+                    GENERAL_WARN_LOG_THROTTLE_MS,
+                );
+            });
+        }, ms);
+    }
 
-    const headers = this.getAuthHeaders();
+    /**
+     * Is called when adapter shuts down - callback has to be called under any circumstances!
+     *
+     * @param {() => void} callback Callback to be called when unloaded
+     */
+    onUnload(callback) {
+        try {
+            this.isShuttingDown = true;
 
-    try {
-      this.log.debug(
-        `Dismissing notification ${messageOrSequenceId} on topic "${topic}" (via PUT)`,
-      );
-      const response = await axios.put(endpoint, null, {
-        headers,
-        timeout: 10000,
-      });
-      this.log.debug(
-        `Notification "${messageOrSequenceId}" successfully dismissed on topic "${topic}" (HTTP ${response.status})`,
-      );
-      return response.data || {};
-    } catch (error) {
-      this.log.error(
-        `Failed to dismiss notification "${messageOrSequenceId}" on topic "${topic}": ${error.message}`,
-      );
-      if (error.response) {
-        const status = error.response.status;
-        const data = this.formatErrorResponse(error.response.data);
-        throw new Error(
-          `Failed to dismiss notification: HTTP ${status}: ${data}`,
-          { cause: error },
-        );
-      } else {
-        throw new Error(`Failed to dismiss notification: ${error.message}`, {
-          cause: error,
+            // Close all SSE subscriptions
+            for (const [topicName, es] of this.subscriptions) {
+                this.log.debug(`Closing subscription for topic "${topicName}"`);
+                es.close();
+            }
+            this.subscriptions.clear();
+            this.warnLogState.clear();
+            this.sseErrorLogState.clear();
+
+            // Clear intervals
+            if (this.statsInterval) {
+                this.clearInterval(this.statsInterval);
+                this.statsInterval = null;
+            }
+            if (this.versionCheckTimer) {
+                this.clearTimeout(this.versionCheckTimer);
+                this.versionCheckTimer = null;
+            }
+
+            this.log.info('ntfy-client adapter stopped.');
+            callback();
+        } catch {
+            callback();
+        }
+    }
+
+    /**
+     * Some message was sent to this instance over message box. Used by email, pushover, text2speech, ...
+     * Using this method requires "common.messagebox" property to be set to true in io-package.json
+     *
+     * @param {ioBroker.Message} obj The message object
+     */
+    async onMessage(obj) {
+        if (!obj || typeof obj !== 'object' || !Object.prototype.hasOwnProperty.call(obj, 'message')) {
+            return;
+        }
+
+        try {
+            let result;
+            switch (obj.command) {
+                case 'send':
+                    result = await this.sendNotification(obj.message);
+                    break;
+                case 'publish':
+                    result = await this.sendNotification(obj.message);
+                    break;
+                case 'clear':
+                case 'dismiss':
+                    result = await this.dismissNotification(obj.message);
+                    break;
+                case 'delete':
+                    result = await this.deleteNotification(obj.message);
+                    break;
+                default:
+                    this.log.warn(`Unknown command: ${obj.command}`);
+                    if (obj.callback) {
+                        this.sendTo(obj.from, obj.command, { error: `Unknown command: ${obj.command}` }, obj.callback);
+                    }
+                    return;
+            }
+
+            if (obj.callback) {
+                this.sendTo(obj.from, obj.command, { success: true, ...result }, obj.callback);
+            }
+        } catch (error) {
+            this.log.error(`Failed to execute command "${obj.command}": ${error.message}`);
+            if (obj.callback) {
+                this.sendTo(obj.from, obj.command, { error: error.message }, obj.callback);
+            }
+        }
+    }
+
+    /**
+     * Check if a value is truthy in the ntfy boolean sense.
+     *
+     * @param {*} val Value to check
+     * @returns {boolean} Whether the value is truthy
+     */
+    isTruthy(val) {
+        return val === true || val === 'true' || val === 'yes' || val === '1';
+    }
+
+    /**
+     * Build common notification headers from options.
+     * Used by both sendNotification and sendWithFileAttachment.
+     *
+     * @param {object} opts Notification options
+     * @returns {Record<string, string>} Headers object
+     */
+    buildCommonHeaders(opts) {
+        const headers = {};
+        if (opts.title) {
+            headers['Title'] = opts.title;
+        }
+        if (opts.priority) {
+            headers['Priority'] = opts.priority.toString();
+        }
+        if (opts.tags) {
+            headers['Tags'] = Array.isArray(opts.tags) ? opts.tags.join(',') : opts.tags;
+        }
+        if (opts.click) {
+            headers['Click'] = opts.click;
+        }
+        if (opts.filename) {
+            headers['Filename'] = opts.filename;
+        }
+        if (opts.actions) {
+            headers['Actions'] = typeof opts.actions === 'object' ? JSON.stringify(opts.actions) : opts.actions;
+        }
+        if (opts.markdown) {
+            headers['Markdown'] = 'yes';
+        }
+        if (opts.delay) {
+            headers['Delay'] = opts.delay;
+        }
+        if (opts.email) {
+            headers['Email'] = opts.email;
+        }
+        if (opts.call) {
+            headers['Call'] = opts.call;
+        }
+        if (opts.icon) {
+            headers['Icon'] = opts.icon;
+        }
+        if (opts.sequenceId) {
+            headers['Sequence-ID'] = opts.sequenceId;
+        }
+        if (this.isTruthy(opts.disableCache)) {
+            headers['Cache'] = 'no';
+        }
+        if (this.isTruthy(opts.disableFirebase)) {
+            headers['Firebase'] = 'no';
+        }
+        if (opts.unifiedPush === true || opts.unifiedPush === 'true' || opts.unifiedPush === '1') {
+            headers['UnifiedPush'] = '1';
+        }
+        return headers;
+    }
+
+    /**
+     * Build an array of debug parameter strings for logging.
+     * Used by both sendNotification and sendWithFileAttachment.
+     *
+     * @param {object} opts Notification options
+     * @returns {string[]} Array of formatted debug strings
+     */
+    buildDebugParams(opts) {
+        const params = [];
+        if (opts.text) {
+            params.push(`Message: "${opts.text}"`);
+        }
+        if (opts.title) {
+            params.push(`Title: "${opts.title}"`);
+        }
+        if (opts.priority) {
+            params.push(`Priority: "${opts.priority}"`);
+        }
+        if (opts.tags) {
+            params.push(`Tags: "${opts.tags}"`);
+        }
+        if (opts.click) {
+            params.push(`Click: "${opts.click}"`);
+        }
+        if (opts.attach) {
+            params.push(`Attach: "${opts.attach}"`);
+        }
+        if (opts.filename) {
+            params.push(`Filename: "${opts.filename}"`);
+        }
+        if (opts.actions) {
+            params.push(`Actions: "${typeof opts.actions === 'object' ? JSON.stringify(opts.actions) : opts.actions}"`);
+        }
+        if (opts.markdown) {
+            params.push(`Markdown: "yes"`);
+        }
+        if (opts.delay) {
+            params.push(`Delay: "${opts.delay}"`);
+        }
+        if (opts.email) {
+            params.push(`Email: "${opts.email}"`);
+        }
+        if (opts.call) {
+            params.push(`Call: "${opts.call}"`);
+        }
+        if (opts.icon) {
+            params.push(`Icon: "${opts.icon}"`);
+        }
+        if (opts.sequenceId) {
+            params.push(`Sequence-ID: "${opts.sequenceId}"`);
+        }
+        if (this.isTruthy(opts.disableCache)) {
+            params.push(`Cache: "no"`);
+        }
+        if (this.isTruthy(opts.disableFirebase)) {
+            params.push(`Firebase: "no"`);
+        }
+        if (opts.unifiedPush === true || opts.unifiedPush === 'true' || opts.unifiedPush === '1') {
+            params.push(`UnifiedPush: "1"`);
+        }
+        if (opts.template) {
+            params.push(`Template: "${opts.template}"`);
+        }
+        return params;
+    }
+
+    /**
+     * Build a request URL with template query parameter if applicable.
+     *
+     * @param {string} endpoint Base endpoint URL
+     * @param {*} template Template value
+     * @returns {string} Request URL with optional tpl parameter
+     */
+    buildTemplateUrl(endpoint, template) {
+        if (template !== undefined && template !== null && template !== '' && template !== false) {
+            const tplVal = this.isTruthy(template) ? 'yes' : template;
+            return `${endpoint}${endpoint.includes('?') ? '&' : '?'}tpl=${tplVal}`;
+        }
+        return endpoint;
+    }
+
+    /**
+     * Send a notification to ntfy.
+     *
+     * @param {string|object} msgObj The message object or string
+     * @returns {Promise<object>} The response data
+     */
+    async sendNotification(msgObj) {
+        this.log.debug(`sendNotification called with: ${JSON.stringify(msgObj)}`);
+        let text = '';
+        let topic = '';
+        let title = '';
+        let priority = '';
+        let tags = '';
+        let click = '';
+        let attach = '';
+        let attachFile = '';
+        let filename = '';
+        let actions = '';
+        let markdown = false;
+        let delay = '';
+        let email = '';
+        let call = '';
+        let icon = '';
+        let sequenceId = '';
+        let disableCache = '';
+        let disableFirebase = '';
+        let unifiedPush = '';
+        let template = '';
+        let jsonData = '';
+
+        if (typeof msgObj === 'string') {
+            text = msgObj;
+        } else if (msgObj && typeof msgObj === 'object') {
+            text = msgObj.message || '';
+            topic = msgObj.topic || '';
+            title = msgObj.title || '';
+            priority = msgObj.priority || '';
+            tags = msgObj.tags || '';
+            click = msgObj.click || '';
+            attach = msgObj.attach || '';
+            attachFile = msgObj.attach_file || '';
+            filename = msgObj.filename || '';
+            actions = msgObj.actions || '';
+            markdown = !!msgObj.markdown;
+            delay = msgObj.delay || '';
+            email = msgObj.email || '';
+            call = msgObj.call || '';
+            icon = msgObj.icon || '';
+            sequenceId = msgObj.sequence_id || '';
+            disableCache = msgObj.disable_cache;
+            disableFirebase = msgObj.disable_firebase;
+            unifiedPush = msgObj.unified_push;
+            template = msgObj.template;
+            jsonData = msgObj.data || '';
+        }
+
+        // If message is an object (e.g. a JSON payload for templates), stringify it early
+        // to prevent axios from auto-setting "Content-Type: application/json"
+        if (typeof text === 'object' && text !== null) {
+            text = JSON.stringify(text);
+        }
+
+        // Use default topic from config if not specified
+        if (!topic) {
+            this.log.debug('No topic specified, using default topic from config...');
+            topic = this.config.defaultTopic || '';
+        }
+
+        if (!topic) {
+            throw new Error('Topic is required to send a notification.');
+        }
+
+        // Validate priority value
+        if (
+            priority &&
+            !['1', '2', '3', '4', '5', 'min', 'low', 'default', 'high', 'max', 'urgent'].includes(
+                priority.toString().toLowerCase(),
+            )
+        ) {
+            this.log.warn(
+                `Invalid priority value: "${priority}". Valid values are 1-5 or min/low/default/high/max/urgent.`,
+            );
+        }
+
+        const url = (this.config.url || 'https://ntfy.sh').replace(/\/+$/, '');
+
+        if (attach && attachFile) {
+            this.log.warn(
+                'Both "attach" (URL) and "attach_file" (local file) are provided. "attach_file" will take precedence.',
+            );
+        }
+
+        // If attach_file is specified, use PUT method with file upload
+        if (attachFile) {
+            return await this.sendWithFileAttachment({
+                url,
+                topic,
+                text,
+                title,
+                priority,
+                tags,
+                click,
+                filename,
+                actions,
+                markdown,
+                delay,
+                email,
+                call,
+                icon,
+                sequenceId,
+                disableCache,
+                disableFirebase,
+                unifiedPush,
+                template,
+                filePath: attachFile,
+                jsonData,
+            });
+        }
+
+        const endpoint = `${url}/${encodeURIComponent(topic)}`;
+        this.log.debug(`Sending notification to endpoint: ${endpoint}`);
+
+        const headers = this.buildCommonHeaders({
+            title,
+            priority,
+            tags,
+            click,
+            filename,
+            actions,
+            markdown,
+            delay,
+            email,
+            call,
+            icon,
+            sequenceId,
+            disableCache,
+            disableFirebase,
+            unifiedPush,
         });
-      }
+
+        if (attach) {
+            headers['Attach'] = attach;
+        }
+
+        // Template query param (yes/true/1 for manual, or a name like 'github')
+        let requestUrl = this.buildTemplateUrl(endpoint, template);
+
+        if (requestUrl !== endpoint && template) {
+            // If separate data is provided, use it as body and message as header template
+            if (jsonData) {
+                if (text) {
+                    headers['Message'] = text;
+                }
+                text = typeof jsonData === 'object' ? JSON.stringify(jsonData) : jsonData;
+            }
+        }
+
+        // Apply Authentication
+        const authHeaders = this.getAuthHeaders();
+        Object.assign(headers, authHeaders);
+
+        try {
+            const debugParams = this.buildDebugParams({
+                text,
+                title,
+                priority,
+                tags,
+                click,
+                attach,
+                filename,
+                actions,
+                markdown,
+                delay,
+                email,
+                call,
+                icon,
+                sequenceId,
+                disableCache,
+                disableFirebase,
+                unifiedPush,
+                template,
+            });
+
+            this.log.debug(`Sending notification to topic "${topic}" (${debugParams.join(', ')})`);
+            const authType = this.getConfiguredAuthType();
+            const safeHeaders = this.sanitizeHeadersForLog(headers);
+            this.log.debug(
+                `POST request to ${requestUrl} with headers: ${JSON.stringify(safeHeaders)} (authType: ${authType})`,
+            );
+            const response = await axios.post(requestUrl, text, {
+                headers,
+                timeout: 10000,
+            });
+            this.log.debug(`Notification successfully sent to topic "${topic}" (HTTP ${response.status})`);
+
+            // Refresh account stats and reset connection state after sending
+            await this.setStateAsync('info.connection', true, true);
+            await this.fetchAccountStats();
+
+            return response.data || {};
+        } catch (error) {
+            this.log.error(`Failed to send notification to topic "${topic}": ${error.message}`);
+            if (error.response) {
+                const status = error.response.status;
+                const data = this.formatErrorResponse(error.response.data);
+                throw new Error(`ntfy server returned HTTP ${status}: ${data}`, {
+                    cause: error,
+                });
+            } else if (error.request) {
+                throw new Error(
+                    `No response from ntfy server at ${url}. Please check the server URL and network connectivity.`,
+                    { cause: error },
+                );
+            } else {
+                throw error;
+            }
+        }
     }
-  }
 
-  /**
-   * Delete a notification from the server.
-   *
-   * @param {string|object} msgObj The message object or ID
-   * @returns {Promise<object>} The response data
-   */
-  async deleteNotification(msgObj) {
-    this.log.debug(`deleteNotification called with: ${JSON.stringify(msgObj)}`);
-    let topic = "";
-    let messageOrSequenceId = "";
+    /**
+     * Send a notification with a local file attachment via PUT.
+     *
+     * @param {object} opts Notification options
+     * @param {string} opts.url Server URL
+     * @param {string} opts.topic Topic name
+     * @param {string} opts.text Message text
+     * @param {string} opts.title Title
+     * @param {string} opts.priority Priority
+     * @param {string} opts.tags Tags
+     * @param {string} opts.click Click URL
+     * @param {string} opts.filename Filename
+     * @param {string|object} opts.actions Actions
+     * @param {boolean} opts.markdown Markdown enabled
+     * @param {string} opts.delay Delay
+     * @param {string} opts.email Email
+     * @param {string} opts.call Call
+     * @param {string} opts.icon Icon URL
+     * @param {string} opts.sequenceId Sequence ID
+     * @param {string|boolean} opts.disableCache Disable server-side caching
+     * @param {string|boolean} opts.disableFirebase Disable Firebase Cloud Messaging
+     * @param {string} opts.unifiedPush UnifiedPush control
+     * @param {string} opts.template Template control
+     * @param {string} opts.filePath Path to the file to attach
+     * @param {string|object} [opts.jsonData] JSON data for templating
+     * @returns {Promise<object>} The response data
+     */
+    async sendWithFileAttachment(opts) {
+        const {
+            url,
+            topic,
+            text,
+            title,
+            priority,
+            tags,
+            click,
+            actions,
+            markdown,
+            delay,
+            email,
+            call,
+            icon,
+            sequenceId,
+            disableCache,
+            disableFirebase,
+            unifiedPush,
+            template,
+            filePath,
+            jsonData,
+        } = opts;
 
-    if (msgObj && typeof msgObj === "object") {
-      topic = msgObj.topic || "";
-      messageOrSequenceId = msgObj.sequence_id || "";
-    } else {
-      messageOrSequenceId = msgObj;
+        let { filename } = opts;
+
+        this.log.debug(`sendWithFileAttachment called for file: ${filePath}`);
+        const endpoint = `${url}/${encodeURIComponent(topic)}`;
+        this.log.debug(`Sending file attachment to endpoint: ${endpoint}`);
+
+        // Determine filename from path if not specified
+        if (!filename) {
+            filename = path.basename(filePath);
+        }
+
+        // Check if the file size exceeds the server's limits if stats are available
+        try {
+            const fileStats = await fs.promises.stat(filePath);
+            const fileSize = fileStats.size;
+
+            const storageRemainingState = await this.getStateAsync('stats.attachments.storageRemaining');
+            const fileSizeLimitState = await this.getStateAsync('stats.attachments.fileSizeLimit');
+
+            if (fileSizeLimitState && fileSizeLimitState.val !== null && fileSizeLimitState.val > 0) {
+                if (fileSize > fileSizeLimitState.val) {
+                    throw new Error(
+                        `File size (${fileSize} bytes) exceeds the ntfy server's file size limit (${fileSizeLimitState.val} bytes).`,
+                    );
+                }
+            }
+
+            if (storageRemainingState && storageRemainingState.val !== null && storageRemainingState.val >= 0) {
+                // Only check if limited (some servers might return a huge number for unlimited, or null)
+                if (fileSize > storageRemainingState.val) {
+                    throw new Error(
+                        `File size (${fileSize} bytes) exceeds the remaining storage space on the ntfy server (${storageRemainingState.val} bytes).`,
+                    );
+                }
+            }
+        } catch (e) {
+            const errorMessage = e?.message || String(e);
+            if (errorMessage.includes('exceeds')) {
+                throw e;
+            }
+            this.log.debug(`Could not pre-check file limits: ${errorMessage}`);
+        }
+
+        const headers = {
+            'Content-Type': 'application/octet-stream',
+            ...this.buildCommonHeaders({
+                title,
+                priority,
+                tags,
+                click,
+                filename,
+                actions,
+                markdown,
+                delay,
+                email,
+                call,
+                icon,
+                sequenceId,
+                disableCache,
+                disableFirebase,
+                unifiedPush,
+            }),
+        };
+
+        if (text) {
+            headers['Message'] = text;
+        }
+
+        // Template query param (yes/true/1 for manual, or a name like 'github')
+        const requestUrl = this.buildTemplateUrl(endpoint, template);
+
+        if (requestUrl !== endpoint && template) {
+            // If separate data is provided, use it as headers (X-...) for file uploads
+            if (jsonData && typeof jsonData === 'object') {
+                for (const [key, value] of Object.entries(jsonData)) {
+                    // ntfy uses these as {{.key}}
+                    headers[`X-${key}`] = typeof value === 'object' ? JSON.stringify(value) : String(value);
+                }
+            } else if (jsonData) {
+                this.log.warn('jsonData for file attachments with templates must be an object to be sent as headers.');
+            }
+        }
+
+        // Apply Authentication
+        const authHeaders = this.getAuthHeaders();
+        Object.assign(headers, authHeaders);
+
+        try {
+            const debugFileParams = this.buildDebugParams({
+                text,
+                title,
+                priority,
+                tags,
+                click,
+                filename,
+                actions,
+                markdown,
+                delay,
+                email,
+                call,
+                icon,
+                sequenceId,
+                disableCache,
+                disableFirebase,
+                unifiedPush,
+                template,
+            });
+
+            this.log.debug(`Sending file attachment "${filename}" to topic "${topic}" (${debugFileParams.join(', ')})`);
+            this.log.debug(`Reading file: ${filePath}`);
+            const fileData = await fs.promises.readFile(filePath);
+            this.log.debug(`File size: ${fileData.length} bytes`);
+            const response = await axios.put(requestUrl, fileData, {
+                headers,
+                timeout: 30000,
+            });
+            this.log.debug(`File attachment successfully sent to topic "${topic}" (HTTP ${response.status})`);
+
+            // Refresh account stats and reset connection state after sending
+            await this.setStateAsync('info.connection', true, true);
+            await this.fetchAccountStats();
+
+            return response.data || {};
+        } catch (error) {
+            this.log.error(`Failed to send file attachment to topic "${topic}": ${error.message}`);
+            if (error.code === 'ENOENT') {
+                throw new Error(`File not found: ${filePath}`, { cause: error });
+            }
+            if (error.response) {
+                const status = error.response.status;
+                const data = this.formatErrorResponse(error.response.data);
+                throw new Error(`ntfy server returned HTTP ${status}: ${data}`, {
+                    cause: error,
+                });
+            } else if (error.request) {
+                throw new Error(
+                    `No response from ntfy server at ${url}. Please check the server URL and network connectivity.`,
+                    { cause: error },
+                );
+            } else {
+                throw error;
+            }
+        }
     }
 
-    if (!topic) {
-      topic = this.config.defaultTopic || "";
+    /**
+     * Dismiss a notification (mark as read).
+     *
+     * @param {string|object} msgObj The message object or ID
+     * @returns {Promise<object>} The response data
+     */
+    async dismissNotification(msgObj) {
+        this.log.debug(`dismissNotification called with: ${JSON.stringify(msgObj)}`);
+        let topic = '';
+        let messageOrSequenceId = '';
+
+        if (msgObj && typeof msgObj === 'object') {
+            topic = msgObj.topic || '';
+            messageOrSequenceId = msgObj.sequence_id || '';
+        } else {
+            messageOrSequenceId = msgObj;
+        }
+
+        if (!topic) {
+            topic = this.config.defaultTopic || '';
+        }
+
+        if (!topic) {
+            throw new Error('Topic is required to dismiss a notification.');
+        }
+
+        if (!messageOrSequenceId) {
+            throw new Error('sequence_id is required to dismiss a notification.');
+        }
+
+        const url = (this.config.url || 'https://ntfy.sh').replace(/\/+$/, '');
+        const endpoint = `${url}/${encodeURIComponent(topic)}/${encodeURIComponent(messageOrSequenceId)}/clear`;
+
+        const headers = this.getAuthHeaders();
+
+        try {
+            this.log.debug(`Dismissing notification ${messageOrSequenceId} on topic "${topic}" (via PUT)`);
+            const response = await axios.put(endpoint, null, {
+                headers,
+                timeout: 10000,
+            });
+            this.log.debug(
+                `Notification "${messageOrSequenceId}" successfully dismissed on topic "${topic}" (HTTP ${response.status})`,
+            );
+            return response.data || {};
+        } catch (error) {
+            this.log.error(
+                `Failed to dismiss notification "${messageOrSequenceId}" on topic "${topic}": ${error.message}`,
+            );
+            if (error.response) {
+                const status = error.response.status;
+                const data = this.formatErrorResponse(error.response.data);
+                throw new Error(`Failed to dismiss notification: HTTP ${status}: ${data}`, { cause: error });
+            } else {
+                throw new Error(`Failed to dismiss notification: ${error.message}`, {
+                    cause: error,
+                });
+            }
+        }
     }
 
-    if (!topic) {
-      throw new Error("Topic is required to delete a notification.");
+    /**
+     * Delete a notification from the server.
+     *
+     * @param {string|object} msgObj The message object or ID
+     * @returns {Promise<object>} The response data
+     */
+    async deleteNotification(msgObj) {
+        this.log.debug(`deleteNotification called with: ${JSON.stringify(msgObj)}`);
+        let topic = '';
+        let messageOrSequenceId = '';
+
+        if (msgObj && typeof msgObj === 'object') {
+            topic = msgObj.topic || '';
+            messageOrSequenceId = msgObj.sequence_id || '';
+        } else {
+            messageOrSequenceId = msgObj;
+        }
+
+        if (!topic) {
+            topic = this.config.defaultTopic || '';
+        }
+
+        if (!topic) {
+            throw new Error('Topic is required to delete a notification.');
+        }
+
+        if (!messageOrSequenceId) {
+            throw new Error('sequence_id is required to delete a notification.');
+        }
+
+        const url = (this.config.url || 'https://ntfy.sh').replace(/\/+$/, '');
+        const endpoint = `${url}/${encodeURIComponent(topic)}/${encodeURIComponent(messageOrSequenceId)}`;
+
+        const headers = this.getAuthHeaders();
+
+        try {
+            this.log.debug(`Deleting notification ${messageOrSequenceId} from topic "${topic}"`);
+            const response = await axios.delete(endpoint, {
+                headers,
+                timeout: 10000,
+            });
+            this.log.debug(
+                `Notification "${messageOrSequenceId}" successfully deleted from topic "${topic}" (HTTP ${response.status})`,
+            );
+            return response.data || {};
+        } catch (error) {
+            this.log.error(
+                `Failed to delete notification "${messageOrSequenceId}" from topic "${topic}": ${error.message}`,
+            );
+            if (error.response) {
+                const status = error.response.status;
+                const data = this.formatErrorResponse(error.response.data);
+                throw new Error(`Failed to delete notification: HTTP ${status}: ${data}`, { cause: error });
+            } else {
+                throw new Error(`Failed to delete notification: ${error.message}`, {
+                    cause: error,
+                });
+            }
+        }
     }
-
-    if (!messageOrSequenceId) {
-      throw new Error("sequence_id is required to delete a notification.");
-    }
-
-    const url = (this.config.url || "https://ntfy.sh").replace(/\/+$/, "");
-    const endpoint = `${url}/${encodeURIComponent(topic)}/${encodeURIComponent(messageOrSequenceId)}`;
-
-    const headers = this.getAuthHeaders();
-
-    try {
-      this.log.debug(
-        `Deleting notification ${messageOrSequenceId} from topic "${topic}"`,
-      );
-      const response = await axios.delete(endpoint, {
-        headers,
-        timeout: 10000,
-      });
-      this.log.debug(
-        `Notification "${messageOrSequenceId}" successfully deleted from topic "${topic}" (HTTP ${response.status})`,
-      );
-      return response.data || {};
-    } catch (error) {
-      this.log.error(
-        `Failed to delete notification "${messageOrSequenceId}" from topic "${topic}": ${error.message}`,
-      );
-      if (error.response) {
-        const status = error.response.status;
-        const data = this.formatErrorResponse(error.response.data);
-        throw new Error(
-          `Failed to delete notification: HTTP ${status}: ${data}`,
-          { cause: error },
-        );
-      } else {
-        throw new Error(`Failed to delete notification: ${error.message}`, {
-          cause: error,
-        });
-      }
-    }
-  }
 }
 
 if (require.main !== module) {
-  // Export the constructor in compact mode
-  /**
-   * @param {Partial<utils.AdapterOptions>} [options] Options for the adapter
-   */
-  module.exports = (options) => new Ntfy(options);
+    // Export the constructor in compact mode
+    /**
+     * @param {Partial<utils.AdapterOptions>} [options] Options for the adapter
+     */
+    module.exports = options => new Ntfy(options);
 } else {
-  // otherwise start the instance directly
-  new Ntfy();
+    // otherwise start the instance directly
+    new Ntfy();
 }
