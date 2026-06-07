@@ -275,6 +275,14 @@ Ntfy supports a few variations:
 | `delete`            | Delete a notification by sequence_id                 |
 
 ## Changelog
+
+### **WORK IN PROGRESS**
+
+- (lubepi) **FIXED**: Adapter now creates missing parent folder objects (stats, topics) so they appear correctly in the object tree
+- (lubepi) **FIXED**: Corrected state roles for attachment-related states (storage, file size, bandwidth)
+- (lubepi) **ENHANCED**: Hardened error handling throughout the adapter and extracted reusable helper methods
+- (lubepi) **ENHANCED**: Cleaned up orphaned translation keys from all language files
+
 ### 0.1.3 (2026-04-12)
 - (lubepi) Refactor: Move internal config signature to local file storage (remove useless object from tree)
 
