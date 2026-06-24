@@ -306,6 +306,8 @@ Ntfy supports a few variations:
 
 [Older changes can be found here](CHANGELOG_OLD.md)
 
+[Older changelogs can be found there](CHANGELOG_OLD.md)
+
 ## Legal Notice
 
 This adapter is **NOT** an official product of ntfy LLC. The name **ntfy**, the logo and branding are trademarks of ntfy LLC. This adapter is a community project to provide integration into ioBroker.
