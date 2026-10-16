@@ -3,7 +3,8 @@
   "version": "0.1.4",
   "description": "Unofficial ntfy.sh client adapter for ioBroker",
   "author": {
-    "name": "lubepi"
+    "name": "lubepi",
+    "email": "lukas@piel.work"
   },
   "homepage": "https://github.com/lubepi/ioBroker.ntfy-client",
   "license": "MIT",

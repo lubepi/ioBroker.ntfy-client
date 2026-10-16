@@ -96,7 +96,7 @@
       "zh-cn": "ioBroker 的非官方 ntfy.sh 客户端适配器"
     },
     "authors": [
-      "lubepi"
+      "lubepi <lukas@piel.work>"
     ],
     "keywords": [
       "ntfy",

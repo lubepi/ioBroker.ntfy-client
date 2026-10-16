@@ -278,6 +278,8 @@ Ntfy supports a few variations:
 
 ### **WORK IN PROGRESS**
 - (ioBroker-Bot) Adapter requires admin >= 7.8.23 now.
+- (lubepi) **ENHANCED**: Added maintainer email address to package metadata and copyright notices
+- (lubepi) **CI/CD**: Added Node.js 26 to the adapter test matrix and replaced `pull_request_target` with the safer `pull_request` trigger for Dependabot auto-merge
 
 ### 0.1.4 (2026-06-07)
 
@@ -318,7 +320,7 @@ This adapter is **NOT** an official product of ntfy LLC. The name **ntfy**, the 
 
 MIT License
 
-Copyright (c) 2026 lubepi
+Copyright (c) 2026 lubepi <lukas@piel.work>
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
