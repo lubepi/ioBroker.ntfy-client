@@ -275,6 +275,8 @@ Ntfy supports a few variations:
 | `delete`            | Delete a notification by sequence_id                 |
 
 ## Changelog
+### **WORK IN PROGRESS**
+
 ### 0.1.5 (2026-10-16)
 - (ioBroker-Bot) Adapter requires admin >= 7.8.23 now.
 - (lubepi) **ENHANCED**: Updated dependencies (`@iobroker/adapter-core`, `axios`, `eventsource`)
