@@ -278,6 +278,7 @@ Ntfy supports a few variations:
 
 ### **WORK IN PROGRESS**
 - (ioBroker-Bot) Adapter requires admin >= 7.8.23 now.
+- (lubepi) **ENHANCED**: Raised minimum Node.js requirement to 22.12.0 to match the requirements of the used dependencies
 - (lubepi) **ENHANCED**: Added maintainer email address to package metadata and copyright notices
 - (lubepi) **CI/CD**: Added Node.js 26 to the adapter test matrix and replaced `pull_request_target` with the safer `pull_request` trigger for Dependabot auto-merge
 
